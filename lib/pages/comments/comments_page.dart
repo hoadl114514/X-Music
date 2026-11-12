@@ -465,6 +465,7 @@ class _CommentTileState extends State<CommentTile> {
                 copyText(c.content, label: '评论');
               },
             ),
+            freeCopyTile(sheet, c.content, label: '评论'),
             ListTile(
               leading: const Icon(Icons.person_outline_rounded, color: AppColors.textPrimary),
               title: Text('复制昵称：${c.user.nickname}', maxLines: 1, overflow: TextOverflow.ellipsis),

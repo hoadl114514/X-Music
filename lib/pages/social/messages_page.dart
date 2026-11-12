@@ -400,7 +400,7 @@ class _Bubble extends StatelessWidget {
       children: [
         if (m.text.isNotEmpty)
           GestureDetector(
-            onLongPress: () => copyText(m.text, label: '私信'),
+            onLongPress: () => showTextCopySheet(context, m.text, label: '私信'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/copy_sheet.dart';
+import '../../widgets/free_copy_page.dart';
 
 /// 把选中的歌词行拼成文本：每行原文，后面按需跟翻译、罗马音。
 String lyricsText(Iterable<LyricLine> lines, {bool translation = false, bool romaji = false}) => [
@@ -60,6 +61,11 @@ Future<void> showLyricLineActions(BuildContext context, Song song, Lyrics lyrics
               leading: const Icon(Icons.subject_rounded, color: AppColors.textPrimary),
               title: const Text('复制全部歌词'),
               onTap: () => copy(lyricsText(lyrics.lines)),
+            ),
+            freeCopyTile(
+              sheet,
+              lyricsText(lyrics.lines, translation: lyrics.hasTranslation),
+              label: '歌词',
             ),
             const SizedBox(height: 8),
           ],
@@ -125,6 +131,19 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
     Navigator.of(context).pop();
   }
 
+  /// 把选中的几句（没选就是全部）放进自由复制页，再挑其中一段。
+  void _freeCopy() {
+    final picked = _selected.isEmpty ? _lines : (_selected.toList()..sort()).map((i) => _lines[i]);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => FreeCopyPage(
+          text: lyricsText(picked, translation: _translation, romaji: _romaji),
+          label: '歌词',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lyrics = widget.lyrics;
@@ -132,6 +151,11 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
       appBar: AppBar(
         title: Text(_selected.isEmpty ? '选择歌词' : '已选 ${_selected.length} 句'),
         actions: [
+          IconButton(
+            tooltip: '自由复制',
+            onPressed: _freeCopy,
+            icon: const Icon(Icons.text_fields_rounded),
+          ),
           TextButton(
             onPressed: () => setState(() {
               if (_allSelected) {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../app/app.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
+import 'free_copy_page.dart';
 
 /// 复制到剪贴板并提示。
 Future<void> copyText(String text, {String? label}) async {
@@ -51,6 +52,10 @@ Future<void> showCopySongSheet(BuildContext context, Song song) {
                   copyText(o.text, label: o.label);
                 },
               ),
+            freeCopyTile(
+              context,
+              [song.title, song.artist, song.album].where((e) => e.isNotEmpty).join('\n'),
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -58,3 +63,41 @@ Future<void> showCopySongSheet(BuildContext context, Song song) {
     ),
   );
 }
+
+/// 长按私信、动态等整段文字时弹出：复制全部，或进入自由复制选一部分。
+Future<void> showTextCopySheet(BuildContext context, String text, {required String label}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: AppColors.surfaceHigh,
+    showDragHandle: true,
+    builder: (sheet) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.copy_rounded, color: AppColors.textPrimary),
+            title: Text('复制$label'),
+            onTap: () {
+              Navigator.of(sheet).pop();
+              copyText(text, label: label);
+            },
+          ),
+          freeCopyTile(sheet, text, label: label),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 底部弹窗里的「自由复制」一项：关掉弹窗，打开自由复制页。
+Widget freeCopyTile(BuildContext sheet, String text, {String? label}) => ListTile(
+  leading: const Icon(Icons.text_fields_rounded, color: AppColors.textPrimary),
+  title: const Text('自由复制'),
+  subtitle: const Text('选择任意一段文字复制'),
+  onTap: () {
+    final nav = Navigator.of(sheet);
+    nav.pop();
+    FreeCopyPage.open(nav.context, text, label: label);
+  },
+);
