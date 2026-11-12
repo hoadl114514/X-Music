@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import '../api/netease_api.dart';
+import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
 import '../data/models.dart';
 import '../data/retry.dart';
@@ -74,6 +75,7 @@ class PlayerController extends ChangeNotifier {
     required this._engine,
     required this._backend,
     required this._settings,
+    this.cache,
     this.retryDelays = defaultRetryDelays,
   }) {
     _applyMode(_savedMode);
@@ -82,6 +84,9 @@ class PlayerController extends ChangeNotifier {
       _engine.errors.listen(_onEngineError),
     ];
   }
+
+  /// 听歌缓存。为 null 时不缓存（测试）。
+  final AudioCache? cache;
 
   /// 取播放地址、加载音频失败时的重试间隔，重试次数就是它的长度。
   final List<Duration> retryDelays;
@@ -475,6 +480,15 @@ class PlayerController extends ChangeNotifier {
     unawaited(_engine.pause());
 
     try {
+      final cache = this.cache;
+      final preferred = _settings.preferredQuality;
+      // 缓存里有就直接放本地文件，一个请求都不发（离线也能放）。
+      final cached = cache == null ? null : await cache.lookup(song.id, preferred);
+      if (token != _token) return;
+      if (cached case final local?) {
+        if (changingSong || _qualities.isEmpty) unawaited(_loadQualities(song, token));
+        return await _playLocal(local, token, startAt);
+      }
       if (changingSong || _qualities.isEmpty) {
         try {
           _qualities = await _backend.qualities(song.id);
@@ -483,13 +497,24 @@ class PlayerController extends ChangeNotifier {
         }
         if (token != _token) return;
       }
-      final preferred = _settings.preferredQuality;
       final target = AudioQuality.pick(_qualities.map((q) => q.quality), preferred) ?? preferred;
+      // 这首歌没有偏好的那档时，按实际请求的音质再找一次缓存。
+      if (cache != null && target != preferred) {
+        final local = await cache.lookup(song.id, target);
+        if (token != _token) return;
+        if (local != null) return await _playLocal(local, token, startAt);
+      }
       // 网络抖动、地址失效、音频没取下来都自动重试；每次重新取地址，免得拿着过期的链接反复试。
       final url = await withRetry(
         () async {
           final url = await _backend.songUrl(song.id, target);
-          if (url != null && token == _token) await _engine.load(url.url, start: startAt);
+          if (url != null && token == _token) {
+            // 试听片段不缓存，只缓存完整的歌。
+            final slot = cache != null && url.trial == null
+                ? await cache.slot(song.id, target, url.quality ?? target, url.url)
+                : null;
+            if (token == _token) await _engine.load(url.url, start: startAt, cacheTo: slot);
+          }
           return url;
         },
         delays: retryDelays,
@@ -498,6 +523,12 @@ class PlayerController extends ChangeNotifier {
       );
       if (token != _token) return;
       if (url == null) {
+        // 现在取不到地址（例如会员过期），但以前缓存过：照样放。
+        if (cache != null) {
+          final local = await cache.best(song.id);
+          if (token != _token) return;
+          if (local != null) return await _playLocal(local, token, startAt);
+        }
         _loading = false;
         _playing = false;
         notifyListeners();
@@ -513,18 +544,57 @@ class PlayerController extends ChangeNotifier {
       } else if (_quality != null && _quality!.index < target.index) {
         _notices.add('当前账号最高可用 ${_quality!.label}');
       }
-      _ready = true;
-      _failStreak = 0;
-      _loading = false;
-      if (_wantPlay) {
-        await _startPlayback();
-      } else {
-        notifyListeners();
-      }
+      await _loaded();
     } catch (e) {
       if (token != _token) return;
+      // 联网失败：有其他音质的缓存就先放它。
+      if (cache case final cache?) {
+        try {
+          final local = await cache.best(song.id);
+          if (token != _token) return;
+          if (local != null) return await _playLocal(local, token, startAt, offline: true);
+        } catch (_) {}
+        if (token != _token) return;
+      }
       _fail(e is ApiException ? e.message : '播放失败：$e');
     }
+  }
+
+  /// 放缓存里的文件。
+  Future<void> _playLocal(
+    CachedAudio local,
+    int token,
+    Duration startAt, {
+    bool offline = false,
+  }) async {
+    await _engine.load(Uri.file(local.file.path).toString(), start: startAt);
+    if (token != _token) return;
+    _quality = local.quality;
+    _trial = null;
+    if (offline) _notices.add('网络不可用，正在播放本地缓存（${local.quality.label}）');
+    await _loaded();
+  }
+
+  /// 地址装进内核之后：标记就绪，按需开始播放。
+  Future<void> _loaded() async {
+    _ready = true;
+    _failStreak = 0;
+    _loading = false;
+    if (_wantPlay) {
+      await _startPlayback();
+    } else {
+      notifyListeners();
+    }
+  }
+
+  /// 放缓存时在后台取一下音质列表，给播放页切音质用。取不到就算了。
+  Future<void> _loadQualities(Song song, int token) async {
+    try {
+      final q = await _backend.qualities(song.id);
+      if (token != _token) return;
+      _qualities = q;
+      notifyListeners();
+    } catch (_) {}
   }
 
   Future<void> _loadLyrics(Song song, LyricSource source, {required bool fallback}) async {

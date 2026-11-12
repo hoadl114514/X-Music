@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/painting.dart';
 import 'package:netease_client/api/netease_api.dart';
 import 'package:netease_client/app/services.dart';
+import 'package:netease_client/audio/audio_cache.dart';
 import 'package:netease_client/audio/audio_engine.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/state/account_controller.dart';
@@ -15,6 +16,9 @@ import 'package:http/testing.dart';
 /// 记录调用、手动推进进度的假播放内核。
 class FakeEngine implements AudioEngine {
   final loaded = <String>[];
+
+  /// 每次 load 给的缓存位置（不缓存时为 null）。
+  final cacheSlots = <CacheSlot?>[];
   Duration loadStart = Duration.zero;
   bool playing = false;
   Duration _position = Duration.zero;
@@ -31,12 +35,13 @@ class FakeEngine implements AudioEngine {
   void error(Object e) => _errors.add(e);
 
   @override
-  Future<void> load(String url, {Duration start = Duration.zero}) async {
+  Future<void> load(String url, {Duration start = Duration.zero, CacheSlot? cacheTo}) async {
     if (failLoads > 0) {
       failLoads--;
       throw Exception('(0) Source error');
     }
     loaded.add(url);
+    cacheSlots.add(cacheTo);
     loadStart = start;
     _position = start;
   }
@@ -89,6 +94,10 @@ class FakeBackend implements PlaybackBackend {
   final scrobbles = <({String id, Duration listened, String? sourceId})>[];
   final starts = <String>[];
 
+  /// 模拟断网：取音质、取地址都抛网络错误。
+  bool offline = false;
+  int qualityRequests = 0;
+
   @override
   Future<void> startPlay(Song song, {String? sourceId}) async => starts.add(song.id);
 
@@ -97,7 +106,13 @@ class FakeBackend implements PlaybackBackend {
       scrobbles.add((id: song.id, listened: listened, sourceId: sourceId));
 
   @override
-  Future<List<QualityInfo>> qualities(String songId) async => [
+  Future<List<QualityInfo>> qualities(String songId) async {
+    qualityRequests++;
+    if (offline) throw Exception('Failed host lookup');
+    return _qualities(songId);
+  }
+
+  List<QualityInfo> _qualities(String songId) => [
     for (final q in qualityMap[songId] ?? const [AudioQuality.standard, AudioQuality.exhigh])
       QualityInfo(quality: q, bitrate: 320000, size: 1 << 20),
   ];
@@ -105,6 +120,7 @@ class FakeBackend implements PlaybackBackend {
   @override
   Future<SongUrl?> songUrl(String songId, AudioQuality quality) async {
     urlRequests.add((songId, quality));
+    if (offline) throw Exception('Failed host lookup');
     final failures = urlFailures[songId] ?? 0;
     if (failures > 0) {
       urlFailures[songId] = failures - 1;
@@ -182,6 +198,8 @@ Future<({AppServices services, FakeEngine engine, FakeBackend backend})> fakeSer
     api: api,
     account: AccountController(api: api, settings: settings),
     player: PlayerController(engine: engine, backend: backend, settings: settings),
+    // 没有目录：设置页能显示缓存选项，但不读写文件。
+    audioCache: AudioCache(directory: Future.value(null), limit: () => settings.audioCacheLimit),
   );
   return (services: services, engine: engine, backend: backend);
 }
