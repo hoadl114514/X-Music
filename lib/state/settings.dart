@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../audio/audio_cache.dart';
 import '../data/models.dart';
 
 /// 本地设置，写入 SharedPreferences。
@@ -22,6 +23,7 @@ class AppSettings extends ChangeNotifier {
   static const _kSyncRecent = 'sync_recent_plays';
   static const _kPlayMode = 'play_mode';
   static const _kSkippedUpdate = 'skipped_update';
+  static const _kAudioCacheLimit = 'audio_cache_limit';
 
   /// 搜索历史最多保留几条。
   static const searchHistoryLimit = 20;
@@ -75,6 +77,10 @@ class AppSettings extends ChangeNotifier {
   String? get skippedUpdate => _prefs.getString(_kSkippedUpdate);
   set skippedUpdate(String? v) =>
       _set(() => v == null ? _prefs.remove(_kSkippedUpdate) : _prefs.setString(_kSkippedUpdate, v));
+
+  /// 听歌缓存上限（字节），默认 5 GB。0 表示不缓存。
+  int get audioCacheLimit => _prefs.getInt(_kAudioCacheLimit) ?? AudioCache.defaultLimit;
+  set audioCacheLimit(int v) => _set(() => _prefs.setInt(_kAudioCacheLimit, v < 0 ? 0 : v));
 
   /// SharedPreferences 的 set 会先更新内存缓存再异步落盘，所以读到的值立即是新的。
   void _set(Future<bool> Function() write) {

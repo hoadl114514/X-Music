@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../app/app.dart';
 import '../app/app_info.dart';
+import '../audio/audio_cache.dart';
 import '../audio/system_media.dart';
+import '../data/format.dart';
 import '../data/models.dart';
 import '../state/account_controller.dart';
 import '../theme/app_theme.dart';
@@ -86,6 +88,10 @@ class SettingsPage extends StatelessWidget {
             value: settings.syncRecentPlays,
             onChanged: (v) => settings.syncRecentPlays = v,
           ),
+          if (AppScope.of(context).audioCache case final cache?) ...[
+            const _Header('缓存'),
+            _AudioCacheTiles(cache),
+          ],
           const _Header('关于'),
           ListTile(
             leading: const Icon(Icons.info_outline_rounded),
@@ -150,6 +156,163 @@ class _NotificationTileState extends State<_NotificationTile> with WidgetsBindin
       subtitle: Text('开启后通知栏、控制中心和锁屏才能显示播放控制'),
       trailing: Icon(Icons.chevron_right_rounded),
       onTap: SystemMediaBridge.openNotificationSettings,
+    );
+  }
+}
+
+/// 听歌缓存：上限、占用、清空。
+class _AudioCacheTiles extends StatelessWidget {
+  const _AudioCacheTiles(this.cache);
+
+  final AudioCache cache;
+
+  static const _presets = [1 << 30, 2 << 30, 5 << 30, 10 << 30, 20 << 30];
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppScope.of(context).settings;
+    return ListenableBuilder(
+      listenable: cache,
+      builder: (context, _) {
+        final limit = settings.audioCacheLimit;
+        final used = cache.usedBytes;
+        return Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.sd_storage_outlined),
+              title: const Text('听歌缓存上限'),
+              subtitle: Text(limit <= 0 ? '已关闭：听歌不保存到本机' : '听过的歌存在本机，再听不耗流量；超出后先删最久没听的'),
+              trailing: Text(limit <= 0 ? '关闭' : formatBytes(limit)),
+              onTap: () => _pickLimit(context, limit),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_sweep_outlined),
+              title: const Text('清空听歌缓存'),
+              subtitle: Text('已用 ${formatBytes(used)}'),
+              enabled: used > 0,
+              onTap: () => _confirmClear(context, used),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _pickLimit(BuildContext context, int current) async {
+    final settings = AppScope.of(context).settings;
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('听歌缓存上限'),
+        children: [
+          for (final v in [0, ..._presets])
+            _LimitOption(
+              label: v == 0
+                  ? '关闭'
+                  : '${formatBytes(v)}${v == AudioCache.defaultLimit ? '（默认）' : ''}',
+              selected: v == current,
+              onTap: () => Navigator.pop(context, v),
+            ),
+          _LimitOption(
+            label: _presets.contains(current) || current <= 0
+                ? '自定义…'
+                : '自定义：${formatBytes(current)}',
+            selected: !_presets.contains(current) && current > 0,
+            onTap: () async {
+              final custom = await _customLimit(context, current);
+              if (custom != null && context.mounted) Navigator.pop(context, custom);
+            },
+          ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    settings.audioCacheLimit = picked;
+    await cache.prune();
+  }
+
+  /// 输入以 GB 为单位的上限，允许小数。
+  Future<int?> _customLimit(BuildContext context, int current) {
+    final controller = TextEditingController(
+      text: current > 0 ? (current / (1 << 30)).toStringAsFixed(1) : '',
+    );
+    int? parse() {
+      final gb = double.tryParse(controller.text.trim());
+      if (gb == null || gb < 0.1 || gb > 1024) return null;
+      return (gb * (1 << 30)).round();
+    }
+
+    return showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('自定义上限'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              suffixText: 'GB',
+              helperText: '0.1 – 1024',
+              errorText: controller.text.isEmpty || parse() != null ? null : '请输入 0.1 到 1024',
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (parse() case final v?) Navigator.pop(context, v);
+            },
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+            TextButton(
+              onPressed: parse() == null ? null : () => Navigator.pop(context, parse()),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmClear(BuildContext context, int used) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空听歌缓存？'),
+        content: Text('将删除 ${formatBytes(used)} 已缓存的歌曲，之后再听需要重新下载。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('清空')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await cache.clear();
+    AppScope.toast('听歌缓存已清空');
+  }
+}
+
+class _LimitOption extends StatelessWidget {
+  const _LimitOption({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SimpleDialogOption(
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Icon(
+            selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+            size: 20,
+            color: selected ? AppColors.accent : null,
+          ),
+          const SizedBox(width: 12),
+          Text(label),
+        ],
+      ),
     );
   }
 }

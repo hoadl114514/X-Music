@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+
+import 'audio_cache.dart';
+import 'caching_source.dart';
 
 /// 播放器内核。抽出接口是为了测试里换成假的实现。
 abstract class AudioEngine {
-  /// 加载地址并停在 [start]，不自动播放。
-  Future<void> load(String url, {Duration start = Duration.zero});
+  /// 加载地址并停在 [start]，不自动播放。本地文件传 `file://` 地址。
+  /// 给了 [cacheTo] 时边播边写进听歌缓存。
+  Future<void> load(String url, {Duration start = Duration.zero, CacheSlot? cacheTo});
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
@@ -45,12 +50,23 @@ class JustAudioEngine implements AudioEngine {
   final _errors = StreamController<Object>.broadcast();
   late final StreamSubscription<PlayerState> _sub;
 
+  CachingAudioSource? _caching;
+
   @override
-  Future<void> load(String url, {Duration start = Duration.zero}) async {
-    // 不要传 headers：just_audio 遇到 headers 会在本机起一个明文 HTTP 代理（127.0.0.1）转发请求，
-    // 而网络安全配置只对 126.net 放开了明文，代理会被拦，表现为 "(0) Source error"。
-    // 网易云音频 CDN 不校验 Referer，直接请求即可。
-    await _player.setAudioSource(AudioSource.uri(Uri.parse(url)), initialPosition: start);
+  Future<void> load(String url, {Duration start = Duration.zero, CacheSlot? cacheTo}) async {
+    // 不要传 headers：网易云音频 CDN 不校验 Referer，直接请求即可。
+    // 边播边缓存时 just_audio 会在本机起一个明文 HTTP 代理（127.0.0.1），
+    // 网络安全配置里已对 127.0.0.1 放开明文，否则会表现为 "(0) Source error"。
+    _caching?.dispose();
+    _caching = null;
+    final uri = Uri.parse(url);
+    final AudioSource source;
+    if (cacheTo != null && !kIsWeb) {
+      source = _caching = CachingAudioSource(uri, cacheTo);
+    } else {
+      source = AudioSource.uri(uri);
+    }
+    await _player.setAudioSource(source, initialPosition: start);
   }
 
   /// just_audio 的 play() 要等到暂停或播完才返回，这里不等它。
@@ -81,6 +97,7 @@ class JustAudioEngine implements AudioEngine {
   @override
   Future<void> dispose() async {
     await _sub.cancel();
+    _caching?.dispose();
     await _player.dispose();
     await _completed.close();
     await _errors.close();
