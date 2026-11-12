@@ -38,3 +38,16 @@ String formatCommentTime(DateTime time, {DateTime? now}) {
   if (time.year == n.year) return '${time.month}月${time.day}日';
   return '${time.year}年${time.month}月${time.day}日';
 }
+
+/// 文件大小：`512 B`、`3.4 MB`、`1.2 GB`、`5 GB`（整数不带小数）。
+String formatBytes(int bytes) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var v = bytes.toDouble();
+  var i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  final text = i == 0 || v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  return '$text ${units[i]}';
+}

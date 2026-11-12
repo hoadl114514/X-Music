@@ -78,6 +78,33 @@ void main() {
     expect(find.text('验证并登录'), findsOneWidget);
   });
 
+  testWidgets('settings: audio cache limit can be picked or typed in', (tester) async {
+    await pumpApp(tester, withQueue: false);
+    await tester.tap(find.byTooltip('个人中心'));
+    await settle(tester);
+    await tester.tap(find.text('设置'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('听歌缓存上限'), 200);
+    expect(find.text('5 GB'), findsOneWidget);
+    expect(find.text('已用 0 B'), findsOneWidget);
+
+    await tester.tap(find.text('听歌缓存上限'));
+    await settle(tester);
+    expect(find.text('5 GB（默认）'), findsOneWidget);
+    await tester.tap(find.text('10 GB'));
+    await settle(tester);
+    expect(find.text('10 GB'), findsOneWidget);
+
+    await tester.tap(find.text('听歌缓存上限'));
+    await settle(tester);
+    await tester.tap(find.text('自定义…'));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), '2.5');
+    await tester.tap(find.text('确定'));
+    await settle(tester);
+    expect(find.text('2.5 GB'), findsOneWidget);
+  });
+
   testWidgets('now playing: quality sheet lists only offered qualities', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('歌曲1').last);

@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 
 import '../api/cookies.dart';
 import '../api/netease_api.dart';
+import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
 import '../audio/system_media.dart';
 import '../data/track_cache.dart';
@@ -22,6 +23,7 @@ class AppServices {
     required this.api,
     required this.account,
     required this.player,
+    this.audioCache,
     PlaylistTracks? tracks,
     this.updates,
   }) : tracks = tracks ?? PlaylistTracks(api);
@@ -36,11 +38,14 @@ class AppServices {
     final settings = await AppSettings.load();
     final api = NeteaseApi(cookies: parseCookie(settings.cookie));
     final lyrics = LyricService(netease: api, qq: QqLyrics());
+    final audioCache = AudioCache.system(limit: () => settings.audioCacheLimit);
+    unawaited(audioCache.init());
     await JustAudioEngine.configureSession();
     final player = PlayerController(
       engine: JustAudioEngine(),
       backend: NeteaseBackend(api, lyrics),
       settings: settings,
+      cache: audioCache,
     );
     final account = AccountController(api: api, settings: settings);
     // 注册系统媒体会话（Android 前台服务 + 通知、iOS 锁屏），保证后台持续播放。
@@ -50,6 +55,7 @@ class AppServices {
       api: api,
       account: account,
       player: player,
+      audioCache: audioCache,
       tracks: PlaylistTracks(api, store: FileTrackStore()),
       updates: UpdateChecker(settings: settings),
     );
@@ -60,6 +66,9 @@ class AppServices {
   final AccountController account;
   final PlayerController player;
 
+  /// 听歌缓存。测试里为 null。
+  final AudioCache? audioCache;
+
   /// 歌单歌曲（带本地缓存）。
   final PlaylistTracks tracks;
 
@@ -68,6 +77,7 @@ class AppServices {
 
   void dispose() {
     player.dispose();
+    audioCache?.dispose();
     account.dispose();
     api.close();
     updates?.dispose();
