@@ -200,7 +200,7 @@ class EventBody extends StatelessWidget {
           ),
         if (e.text.isNotEmpty)
           GestureDetector(
-            onLongPress: () => copyText(e.text, label: '动态'),
+            onLongPress: () => showTextCopySheet(context, e.text, label: '动态'),
             child: Text(e.text, style: const TextStyle(fontSize: 15, height: 1.5)),
           ),
         if (e.pics.isNotEmpty) ...[const SizedBox(height: 8), _Pictures(urls: e.pics)],
