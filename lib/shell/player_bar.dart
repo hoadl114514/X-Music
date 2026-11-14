@@ -8,6 +8,7 @@ import '../widgets/backdrop_color.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/like_button.dart';
 import '../widgets/round_icon_button.dart';
+import 'desktop_shell.dart';
 
 /// 底部迷你播放条，参考 Spotify：悬浮圆角卡片，底色取自封面，底边是一条细进度线。
 ///
@@ -142,6 +143,8 @@ class FloatingBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 电脑布局底部有常驻播放条，二级页面里不再重复显示。
+    if (DesktopShellScope.isActive(context)) return const SizedBox.shrink();
     final nav = navigation;
     return DecoratedBox(
       decoration: BoxDecoration(

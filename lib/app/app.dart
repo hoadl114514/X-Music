@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../shell/app_shell.dart';
+import '../shell/desktop_shell.dart';
 import '../state/account_controller.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import 'app_info.dart';
+import 'platform.dart';
 import 'services.dart';
 
 class NeteaseClientApp extends StatefulWidget {
@@ -43,11 +45,22 @@ class _NeteaseClientAppState extends State<NeteaseClientApp> {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.dark(),
             scaffoldMessengerKey: AppScope.messengerKey,
-            home: const AppShell(),
+            home: isDesktopPlatform ? const _ResponsiveShell() : const AppShell(),
           ),
         ),
       ),
     );
+  }
+}
+
+/// 电脑上按窗口宽度选布局：够宽用三栏的电脑布局，窄了退回手机布局。
+class _ResponsiveShell extends StatelessWidget {
+  const _ResponsiveShell();
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= desktopBreakpoint;
+    return wide ? const DesktopShell() : const AppShell();
   }
 }
 

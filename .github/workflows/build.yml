@@ -1,5 +1,6 @@
-# 每次推送到分支和每个 PR：跑检查、构建 Android APK，作为构建产物上传（保留 14 天）。
-# 在 Actions 页面对应的运行里下载 x-music-apk。也可以在 Actions 页面手动触发。
+# 每次推送到分支和每个 PR：跑检查，构建 Android APK、Windows 和 macOS 电脑版，
+# 作为构建产物上传（保留 14 天）。在 Actions 页面对应的运行里下载
+# x-music-apk / x-music-windows / x-music-macos。也可以在 Actions 页面手动触发。
 name: Build
 
 on:
@@ -48,4 +49,68 @@ jobs:
         with:
           name: x-music-apk
           path: dist/*.apk
+          retention-days: 14
+
+  # Windows 电脑版：解压后运行 X-Music.exe。
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+
+      # smtc_windows（系统媒体控制）用 Rust 编译，runner 自带 rustup。
+      - run: rustup default stable
+
+      - run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $sha = git rev-parse --short HEAD
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "dist/x-music-$sha-windows-x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x-music-windows
+          path: dist/*.zip
+          retention-days: 14
+
+  # macOS 电脑版：未签名，首次打开需要右键「打开」，或运行 xattr -cr /Applications/X-Music.app。
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Package
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          app="build/macos/Build/Products/Release/X-Music.app"
+          mkdir dist
+          ditto -c -k --keepParent "$app" "dist/x-music-$sha-macos.zip"
+          hdiutil create -volname X-Music -srcfolder "$app" -ov -format UDZO "dist/x-music-$sha-macos.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x-music-macos
+          path: dist/*
           retention-days: 14
