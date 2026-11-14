@@ -49,6 +49,9 @@ class NowPlayingPage extends StatefulWidget {
   State<NowPlayingPage> createState() => _NowPlayingPageState();
 }
 
+/// 窗口宽度达到这个值时，封面和歌词左右并排显示。
+const double _wideBreakpoint = 900;
+
 class _NowPlayingPageState extends State<NowPlayingPage> {
   static const _hPad = EdgeInsets.symmetric(horizontal: 24);
 
@@ -82,47 +85,110 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
         child: FlowBackground(
           palette: player.palette,
           imageUrl: song.coverUrl,
-          child: SafeArea(
-            // 左右留白放在每一页里面而不是整个页面外面：PageView 占满屏宽，
-            // 滑动时页面从屏幕边缘进出，不会在留白处被切出一道硬边。
-            child: Column(
-              children: [
-                const Padding(padding: _hPad, child: _TopBar()),
-                Expanded(
-                  child: PageView(
-                    controller: _pages,
-                    children: [
-                      Padding(
-                        padding: _hPad,
-                        child: _CoverPane(song: song, onTapCover: () => _goTo(1)),
-                      ),
-                      Padding(
-                        padding: _hPad,
-                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(0)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _PageDots(controller: _pages, count: 2),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: _hPad,
+          child: MediaQuery.sizeOf(context).width >= _wideBreakpoint
+              ? _WideLayout(song: song)
+              : SafeArea(
+                  // 左右留白放在每一页里面而不是整个页面外面：PageView 占满屏宽，
+                  // 滑动时页面从屏幕边缘进出，不会在留白处被切出一道硬边。
                   child: Column(
                     children: [
-                      SeekBar(),
-                      SizedBox(height: 4),
-                      _QualityPill(),
-                      SizedBox(height: 12),
-                      _Controls(),
+                      const Padding(padding: _hPad, child: _TopBar()),
+                      Expanded(
+                        child: PageView(
+                          controller: _pages,
+                          children: [
+                            Padding(
+                              padding: _hPad,
+                              child: _CoverPane(song: song, onTapCover: () => _goTo(1)),
+                            ),
+                            Padding(
+                              padding: _hPad,
+                              child: _LyricsPane(song: song, onTapHeader: () => _goTo(0)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _PageDots(controller: _pages, count: 2),
+                      const SizedBox(height: 8),
+                      const Padding(
+                        padding: _hPad,
+                        child: Column(
+                          children: [
+                            SeekBar(),
+                            SizedBox(height: 4),
+                            _QualityPill(),
+                            SizedBox(height: 12),
+                            _Controls(),
+                          ],
+                        ),
+                      ),
+                      // 控制区离底部留够距离，单手拇指更好按。
+                      const SizedBox(height: 56),
                     ],
                   ),
                 ),
-                // 控制区离底部留够距离，单手拇指更好按。
-                const SizedBox(height: 56),
-              ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 宽屏播放页（电脑、平板横屏）：左边封面和歌名，右边歌词，底部控制区居中。
+class _WideLayout extends StatelessWidget {
+  const _WideLayout({required this.song});
+
+  final Song song;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+        child: Column(
+          children: [
+            const _TopBar(),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          child: _CoverPane(song: song, onTapCover: null),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 32),
+                  const Expanded(
+                    flex: 6,
+                    child: ShaderMask(
+                      shaderCallback: _fadeEdges,
+                      blendMode: BlendMode.dstIn,
+                      child: LyricsView(fontSize: 30, anchor: 0.38, depth: true),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: const Column(
+                children: [
+                  SeekBar(),
+                  SizedBox(height: 4),
+                  _QualityPill(),
+                  SizedBox(height: 8),
+                  _Controls(),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -229,7 +295,9 @@ class _CoverPane extends StatelessWidget {
   const _CoverPane({required this.song, required this.onTapCover});
 
   final Song song;
-  final VoidCallback onTapCover;
+
+  /// 点封面切到歌词。宽屏下歌词一直显示，为 null。
+  final VoidCallback? onTapCover;
 
   @override
   Widget build(BuildContext context) {

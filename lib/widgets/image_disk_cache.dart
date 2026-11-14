@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../app/platform.dart';
+
 /// 图片的磁盘缓存：按地址的 MD5 存在系统临时目录的 `image_cache/` 下。
 ///
 /// 内存里的图片缓存装不了多少张大封面，切页面回来常常要重新下载；有了这一层，
@@ -33,7 +35,10 @@ abstract final class ImageDiskCache {
   static Future<Directory?> _directory() => _dir ??= () async {
     if (kIsWeb) return null;
     try {
-      final base = await getTemporaryDirectory();
+      // 电脑上的临时目录是所有程序共用的（Windows 的 %TEMP%），放到应用自己的缓存目录。
+      final base = isNativeDesktop
+          ? await getApplicationCacheDirectory()
+          : await getTemporaryDirectory();
       return await Directory('${base.path}/image_cache').create(recursive: true);
     } catch (_) {
       return null;

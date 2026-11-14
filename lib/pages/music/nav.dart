@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app.dart';
 import '../../data/models.dart';
 import '../../widgets/cover_art.dart';
+import '../../shell/desktop_shell.dart';
 import '../../shell/player_bar.dart';
 import '../user/user_page.dart';
 import 'album_page.dart';
@@ -15,8 +16,14 @@ class SubPage extends StatelessWidget {
   final Widget body;
   final List<Widget>? actions;
 
-  static Future<void> push(BuildContext context, Widget page) =>
-      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  /// 电脑布局里从播放页这类盖住整个窗口的页面打开时，放进内容区的导航栈。
+  static Future<void> push(BuildContext context, Widget page) {
+    final shell = DesktopShell.contentNavigator;
+    final nav = shell != null && !DesktopShellScope.isActive(context)
+        ? shell
+        : Navigator.of(context);
+    return nav.push(MaterialPageRoute<void>(builder: (_) => page));
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 import '../api/netease_api.dart';
 import '../app/app.dart';
+import '../app/platform.dart';
 import 'retry_image.dart';
 
 const _channel = MethodChannel('netease_client/share');
@@ -211,8 +214,10 @@ class _ImageViewerPageState extends State<ImageViewerPage> with SingleTickerProv
   }
 }
 
-/// 下载图片并保存到系统相册（Android：Pictures/NeteaseClient）。其他平台复制图片链接。
+/// 下载图片并保存到系统相册（Android：Pictures/NeteaseClient），电脑上存到「下载」文件夹。
+/// 其他平台复制图片链接。
 Future<void> saveImage(String url, {String? title}) async {
+  if (isNativeDesktop) return _saveToDownloads(url, title);
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
     await Clipboard.setData(ClipboardData(text: url));
     AppScope.toast('当前平台不支持保存，已复制图片链接');
@@ -241,6 +246,29 @@ Future<void> saveImage(String url, {String? title}) async {
     AppScope.toast('保存失败：${e.message ?? e.code}');
   } on MissingPluginException {
     AppScope.toast('当前版本不支持保存图片');
+  } catch (e) {
+    AppScope.toast('保存失败：$e');
+  }
+}
+
+Future<void> _saveToDownloads(String url, String? title) async {
+  try {
+    final res = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+    if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
+      throw Exception('HTTP ${res.statusCode}');
+    }
+    final type = res.headers['content-type'] ?? '';
+    final ext = type.contains('png') || url.toLowerCase().endsWith('.png')
+        ? 'png'
+        : type.contains('webp')
+        ? 'webp'
+        : 'jpg';
+    final dir = await getDownloadsDirectory();
+    if (dir == null) throw Exception('找不到下载文件夹');
+    final name = '${imageFileStem(title)}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final file = File('${dir.path}${Platform.pathSeparator}$name');
+    await file.writeAsBytes(res.bodyBytes);
+    AppScope.toast('已保存到 ${file.path}');
   } catch (e) {
     AppScope.toast('保存失败：$e');
   }

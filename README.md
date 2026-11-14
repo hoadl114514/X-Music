@@ -16,6 +16,8 @@
 - 从 v0.1.0 起，安装包使用正式签名。之前的 alpha 版是 debug 签名，需要先卸载旧版再安装（登录状态和设置会清空）。
 - App 启动时会检查 GitHub 上的新正式版，有更新就弹窗提示；设置页「关于」下面也可以手动检查。
 
+**电脑版（预览）**：每次推送后，GitHub Actions 的 Build 运行里有 `x-music-windows`（解压后运行 `X-Music.exe`）和 `x-music-macos`（`.dmg` / `.zip`）。macOS 版没有签名，第一次打开要在「访达」里右键 →「打开」，或运行 `xattr -cr /Applications/X-Music.app`。
+
 | 首页 | 抽屉侧栏 | 播放页 | 播放页下滑 | 全屏歌词 |
 | --- | --- | --- | --- | --- |
 | ![](docs/preview/home.png) | ![](docs/preview/drawer.png) | ![](docs/preview/now-playing.png) | ![](docs/preview/now-playing-cards.png) | ![](docs/preview/lyrics.png) |
@@ -27,6 +29,8 @@
 ```bash
 flutter pub get
 flutter run              # 连接 Android / iOS 设备或模拟器
+flutter run -d windows   # Windows 电脑版（需要 Visual Studio 的 C++ 桌面开发组件和 rustup）
+flutter run -d macos     # macOS 电脑版（需要 Xcode）
 ```
 
 构建正式签名的 APK：在 `android/` 下新建 `key.properties`（已被 `.gitignore` 忽略），写入 `storeFile`、`storePassword`、`keyAlias`、`keyPassword`，再运行 `flutter build apk --release`。没有这个文件时 release 包退回 debug 签名，只适合本地调试。
@@ -49,10 +53,12 @@ flutter run              # 连接 Android / iOS 设备或模拟器
 - **评论**：歌曲、歌单、专辑的评论区，热门 / 最新两种排序，楼中楼回复，点赞、发评论、回复、删除自己的评论。
 - **最近播放同步**：登录后开始放一首歌就报给网易云，出现在官方客户端的「最近播放」；听满 30 秒（短歌听一半）再给听歌排行计数。走和官方客户端一样的日志接口（EAPI + clientlog 域名）；设置里可以关掉。
 - **检查更新**：启动时查 GitHub 最新正式版，比当前版本新就弹窗，可以去下载、以后再说或跳过此版本。设置页「关于」点一下打开项目主页。
+- **电脑版（Windows / macOS）**：窗口够宽时是三栏布局（左侧导航、内容区、底部常驻播放条），窄了自动退回手机布局；播放页封面和歌词左右并排。关闭窗口隐藏到托盘 / 菜单栏继续播放，托盘菜单可以切歌、退出；Windows 接入系统媒体控制（SMTC），macOS 接入「正在播放」，键盘媒体键都能用。全局快捷键：Windows 上 `Ctrl+Alt+空格 / ← / → / ↑ / ↓`，macOS 上 `⌘⌥+` 同样的键，分别是播放暂停、上一首、下一首、音量加减；窗口内按空格播放 / 暂停。Windows 用 media_kit（libmpv）播放，macOS 用系统自带的 AVPlayer。
 - **复制**：长按歌词复制这一句，或进入批量选择（点选单句、长按选一段、全选，可带翻译 / 罗马音）；长按歌名 / 歌手选择复制歌名、歌手、专辑或「歌名 - 歌手」。
 
 ## 设计
 
+- 电脑布局（窗口宽度 ≥ 840）：左侧导航栏 + 内容区（二级页面在内容区里打开）+ 底部播放条（歌曲信息、控制和进度、播放列表、音量）。
 - 手机端布局：顶栏（头像 + 搜索）+ 内容 + 迷你播放条 + 底部导航；点头像从左侧滑出抽屉侧栏（个人资料、听歌排行、最近播放、动态、设置、私信）。
 - 暗色、无彩界面，颜色交给封面；唯一强调色是樱花粉 `#F5A3C7`，只用在选中、喜欢、进度等功能性位置。
 - 播放页：背景是封面主色的纯色渐变；第一屏是大封面、歌名/喜欢、进度、控制；往下滑是歌词预览卡片和歌手卡片。

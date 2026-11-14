@@ -12,12 +12,19 @@ dependencies:
   crypto: ^3.0.8
   flutter:
     sdk: flutter
+  hotkey_manager: ^0.2.3
   http: ^1.6.0
   just_audio: ^0.10.6
+  just_audio_media_kit: ^2.1.0
+  media_kit_libs_windows_audio: ^1.0.9
   path_provider: ^2.1.6
   pointycastle: ^4.0.0
   qr_flutter: ^4.1.0
   shared_preferences: ^2.5.6
+  smtc_windows: ^1.1.0
+  tray_manager: ^0.5.3
+  url_launcher: ^6.3.3
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -26,3 +33,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # 电脑端托盘图标。
+    - assets/tray/
