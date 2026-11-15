@@ -60,6 +60,59 @@ class AccountController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 新建歌单，成功后刷新歌单列表并返回新歌单（找不到时为 null）。
+  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+    if (!isLoggedIn) throw const ApiException('登录后才能新建歌单', code: 301);
+    final created = await _api.createPlaylist(name, private: private);
+    await _reloadPlaylists();
+    return _find(created?.id) ?? created;
+  }
+
+  /// 改自己歌单的名称、简介、封面（[cover] 是 JPEG / PNG 图片）。只提交有变化的部分。
+  Future<void> updatePlaylist(
+    Playlist playlist, {
+    String? name,
+    String? description,
+    List<int>? cover,
+  }) async {
+    if (!isLoggedIn) throw const ApiException('登录后才能编辑歌单', code: 301);
+    try {
+      if (name != null && name != playlist.name) await _api.renamePlaylist(playlist.id, name);
+      if (description != null && description != (playlist.description ?? '')) {
+        await _api.setPlaylistDescription(playlist.id, description);
+      }
+      if (cover != null) await _api.setPlaylistCover(playlist.id, cover);
+    } finally {
+      // 部分成功时也要刷新，界面和服务端保持一致。
+      await _reloadPlaylists().catchError((Object _) {});
+    }
+  }
+
+  /// 删除自己的歌单，成功后从列表里去掉。
+  Future<void> deletePlaylist(Playlist playlist) async {
+    if (!isLoggedIn) throw const ApiException('登录后才能删除歌单', code: 301);
+    await _api.deletePlaylist(playlist.id);
+    _playlists = [
+      for (final p in _playlists)
+        if (p.id != playlist.id) p,
+    ];
+    notifyListeners();
+  }
+
+  /// 列表里 id 为 [id] 的歌单（最新信息），没有为 null。
+  Playlist? _find(String? id) =>
+      id == null ? null : _playlists.where((p) => p.id == id).firstOrNull;
+
+  /// 按 id 取最新的歌单信息，列表里没有时返回 [fallback]。
+  Playlist latest(Playlist fallback) => _find(fallback.id) ?? fallback;
+
+  Future<void> _reloadPlaylists() async {
+    final p = _profile;
+    if (p == null) return;
+    _playlists = await _api.userPlaylists(p.userId);
+    notifyListeners();
+  }
+
   /// 启动时用保存的 Cookie 恢复登录。网络失败时保留 Cookie，下次再试。
   Future<void> restore() async {
     final saved = parseCookie(_settings.cookie);
