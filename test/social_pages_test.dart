@@ -84,6 +84,10 @@ MockClient _client({List<http.Request>? sent}) => MockClient((r) async {
       ],
     });
   }
+  if (path == '/weapi/artist/sub') {
+    sent?.add(r);
+    return _json({'code': 200, 'message': 'success', 'data': null});
+  }
   if (path == '/weapi/user/follow/2') {
     return http.Response.bytes(utf8.encode(jsonEncode({'code': 250, 'message': '关注异常'})), 200);
   }
@@ -177,5 +181,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('暂时无法关注'), findsNothing);
     expect(find.text('关注'), findsOneWidget);
+  });
+
+  testWidgets('an artist follow uses artist/sub instead of the user follow', (tester) async {
+    final sent = <http.Request>[];
+    await _pump(
+      tester,
+      _client(sent: sent),
+      const Center(child: FollowButton(userId: 2, artistId: '12', followed: false)),
+    );
+    await tester.tap(find.text('关注'));
+    await tester.pumpAndSettle();
+    expect(sent.single.url.path, '/weapi/artist/sub');
+    expect(find.text('暂时无法关注'), findsNothing);
+    expect(find.text('已关注'), findsOneWidget);
   });
 }

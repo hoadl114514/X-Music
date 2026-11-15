@@ -417,28 +417,35 @@ class _Header extends StatelessWidget {
                   const SizedBox(height: 8),
                   UserStatusChip(status: d.status, editable: self),
                 ],
-                if (u != null && !self) ...[
+                if (!self && (u != null || a != null)) ...[
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
                     children: [
-                      FollowButton(userId: u.userId, followed: u.followed, compact: true),
-                      OutlinedButton(
-                        onPressed: () => ChatPage.open(
-                          context,
-                          SocialUser(
-                            userId: u.userId,
-                            nickname: u.nickname,
-                            avatarUrl: u.avatarUrl,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: AppColors.outline),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        child: const Text('私信'),
+                      // 有歌手就关注歌手：认证歌手账号的用户关注会被风控拦下。
+                      FollowButton(
+                        userId: u?.userId,
+                        artistId: a?.id,
+                        followed: a?.followed ?? u!.followed,
+                        compact: true,
                       ),
+                      if (u != null)
+                        OutlinedButton(
+                          onPressed: () => ChatPage.open(
+                            context,
+                            SocialUser(
+                              userId: u.userId,
+                              nickname: u.nickname,
+                              avatarUrl: u.avatarUrl,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: AppColors.outline),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: const Text('私信'),
+                        ),
                     ],
                   ),
                 ],

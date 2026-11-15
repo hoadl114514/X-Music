@@ -873,6 +873,16 @@ class NeteaseApi {
     );
   }
 
+  /// 关注 / 取消关注歌手。网页端歌手页的「收藏」就是这个接口，
+  /// 和 App 里的「关注」是同一件事。参数参考 api-enhanced 的 artist_sub。
+  ///
+  /// 认证歌手的账号主页上那个「关注」（`/api/user/follow`）会被风控拦下，
+  /// 所以有歌手 id 时都走这里。
+  Future<void> setArtistFollowed(String artistId, bool follow) => _weapi(
+    '/api/artist/${follow ? 'sub' : 'unsub'}',
+    {'artistId': artistId, 'artistIds': '[$artistId]'},
+  );
+
   /// 歌手的全部歌曲：[byTime] 为 true 按发行时间从新到旧，否则按热度。
   /// 接口单页最多 100 首（再大会返回别人的歌），先取第一页拿到总数，剩下的几页并发取。
   Future<List<Song>> artistAllSongs(String id, {bool byTime = true, int maxSongs = 3000}) async {
@@ -1222,6 +1232,7 @@ class NeteaseApi {
       songCount: _int(raw['musicSize']),
       albumCount: _int(raw['albumSize']),
       accountId: _int(raw['accountId']) > 0 ? _int(raw['accountId']) : null,
+      followed: raw['followed'] == true,
     );
   }
 

@@ -137,6 +137,29 @@ void main() {
     expect(form['encSecKey'], hasLength(256));
   });
 
+  test('artist follow goes through WEAPI artist/sub and artist/unsub', () async {
+    final seen = <http.Request>[];
+    final api = _api({}, seen: seen);
+    await api.setArtistFollowed('12487174', true);
+    await api.setArtistFollowed('12487174', false);
+    expect(seen.map((r) => r.url.toString()), [
+      'https://music.163.com/weapi/artist/sub',
+      'https://music.163.com/weapi/artist/unsub',
+    ]);
+    expect(seen.first.bodyFields.keys, unorderedEquals(['params', 'encSecKey']));
+  });
+
+  test('artist detail reads whether the artist is followed', () async {
+    final api = _api({
+      '/api/v1/artist/12': {
+        'code': 200,
+        'artist': {'id': 12, 'name': '歌手', 'followed': true},
+        'hotSongs': <Object>[],
+      },
+    });
+    expect((await api.artistDetail('12')).artist.followed, isTrue);
+  });
+
   test('risk-control errors include the dialog reason', () async {
     final api = NeteaseApi(
       client: MockClient(
