@@ -237,7 +237,7 @@ void main() {
     expect(find.text('写代码'), findsOneWidget);
   });
 
-  testWidgets('the drawer no longer has a status entry', (tester) async {
+  testWidgets('the drawer has no status or add-friend entry', (tester) async {
     await _pump(
       tester,
       _client(
@@ -249,6 +249,6 @@ void main() {
     );
     expect(find.text('听歌状态'), findsNothing);
     expect(find.text('学习中'), findsNothing);
-    expect(find.text('添加好友'), findsOneWidget);
+    expect(find.text('添加好友'), findsNothing);
   });
 }

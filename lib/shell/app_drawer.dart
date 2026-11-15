@@ -7,11 +7,10 @@ import '../pages/music/nav.dart';
 import '../pages/social/messages_page.dart';
 import '../state/account_controller.dart';
 import '../theme/app_theme.dart';
-import '../widgets/dev_badge.dart';
 import 'destinations.dart';
 import 'user_avatar.dart';
 
-/// 左侧抽屉：个人资料卡、菜单、添加好友、私信。
+/// 左侧抽屉：个人资料卡、菜单、私信。
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key, required this.onSelect});
 
@@ -36,8 +35,6 @@ class AppDrawer extends StatelessWidget {
             const _AccountCard(),
             const SizedBox(height: 8),
             for (final d in Destination.drawer) _MenuItem(destination: d, onTap: () => pick(d)),
-            const SizedBox(height: 12),
-            const _StatusRow(),
             const SizedBox(height: 28),
             const _Messages(),
           ],
@@ -159,60 +156,6 @@ class _MenuItem extends StatelessWidget {
             const SizedBox(width: 18),
             Text(destination.label, style: const TextStyle(fontSize: 17)),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 圆形快捷入口：添加好友。听歌状态在个人主页里设置。
-class _StatusRow extends StatelessWidget {
-  const _StatusRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // TODO(用户主页): 添加好友做好后，搜到的用户点进用户主页（openUser）。
-        _RoundEntry(
-          onTap: () => showNotReady('添加好友'),
-          circle: Container(
-            width: 60,
-            height: 60,
-            decoration: const BoxDecoration(color: AppColors.cardHover, shape: BoxShape.circle),
-            child: const Icon(Icons.add_rounded, size: 30, color: AppColors.textPrimary),
-          ),
-          label: '添加好友',
-        ),
-      ],
-    );
-  }
-}
-
-class _RoundEntry extends StatelessWidget {
-  const _RoundEntry({required this.onTap, required this.circle, required this.label});
-
-  final VoidCallback onTap;
-  final Widget circle;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.panel),
-      child: SizedBox(
-        width: 84,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            children: [
-              circle,
-              const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 15)),
-            ],
-          ),
         ),
       ),
     );
