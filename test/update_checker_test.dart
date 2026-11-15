@@ -15,6 +15,10 @@ void main() {
     expect(compareVersions('v0.1.0-beta', '0.1.0'), lessThan(0));
     expect(compareVersions('v0.10.0', '0.9.0'), greaterThan(0));
     expect(compareVersions('v1.0', '1.0.0'), 0);
+    expect(compareVersions('v0.1.2.1', '0.1.2'), greaterThan(0));
+    expect(compareVersions('v0.1.2', '0.1.2.1'), lessThan(0));
+    expect(compareVersions('v0.1.3', '0.1.2.1'), greaterThan(0));
+    expect(compareVersions('v0.1.2.0', '0.1.2'), 0);
   });
 
   test('newerRelease returns the latest release only when it is newer', () async {

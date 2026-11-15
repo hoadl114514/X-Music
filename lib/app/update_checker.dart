@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -119,7 +120,8 @@ class UpdateChecker {
 
 /// 比较两个版本号（可带 `v` 前缀和 `-alpha` 之类的后缀）。
 ///
-/// 数字部分逐段比较；数字相同时，正式版比带后缀的预发布版新。
+/// 数字部分逐段比较，段数不限（`0.1.2.1` 比 `0.1.2` 新，缺的段当 0）；
+/// 数字相同时，正式版比带后缀的预发布版新。
 int compareVersions(String a, String b) {
   (List<int>, String) parse(String v) {
     final s = v.trim().replaceFirst(RegExp('^[vV]'), '').split('+').first;
@@ -131,7 +133,7 @@ int compareVersions(String a, String b) {
 
   final (na, pa) = parse(a);
   final (nb, pb) = parse(b);
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < max(na.length, nb.length); i++) {
     final x = i < na.length ? na[i] : 0;
     final y = i < nb.length ? nb[i] : 0;
     if (x != y) return x.compareTo(y);

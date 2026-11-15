@@ -36,16 +36,24 @@ class SocialAvatar extends StatelessWidget {
 }
 
 /// 关注 / 取消关注按钮。未登录时点了去登录；看自己时不显示。
+///
+/// 传了 [artistId] 就关注歌手（`/api/artist/sub`，网页端叫「收藏」），否则关注用户。
+/// 认证歌手的账号走用户关注会被风控拦下，所以有歌手 id 时优先用歌手 id。
 class FollowButton extends StatefulWidget {
   const FollowButton({
     super.key,
-    required this.userId,
+    this.userId,
+    this.artistId,
     required this.followed,
     this.compact = false,
     this.onChanged,
-  });
+  }) : assert(userId != null || artistId != null);
 
-  final int userId;
+  /// 账号 id。歌手没有入驻账号时为 null。
+  final int? userId;
+
+  /// 歌手 id。不为 null 时关注走歌手接口。
+  final String? artistId;
   final bool followed;
 
   /// 列表里用的小号按钮。
@@ -63,7 +71,9 @@ class _FollowButtonState extends State<FollowButton> {
   @override
   void didUpdateWidget(FollowButton old) {
     super.didUpdateWidget(old);
-    if (old.followed != widget.followed || old.userId != widget.userId) {
+    if (old.followed != widget.followed ||
+        old.userId != widget.userId ||
+        old.artistId != widget.artistId) {
       _followed = widget.followed;
     }
   }
@@ -79,13 +89,17 @@ class _FollowButtonState extends State<FollowButton> {
     final next = !_followed;
     setState(() => _busy = true);
     try {
-      await api.setFollowed(widget.userId, next);
+      if (widget.artistId case final aid?) {
+        await api.setArtistFollowed(aid, next);
+      } else {
+        await api.setFollowed(widget.userId!, next);
+      }
       if (!mounted) return;
       setState(() => _followed = next);
       widget.onChanged?.call(next);
       AppScope.toast(next ? '已关注' : '已取消关注');
     } on ApiException catch (e) {
-      if (next && e.code == 250 && mounted) {
+      if (next && e.code == 250 && widget.artistId == null && mounted) {
         await _explainRiskControl();
       } else {
         AppScope.toast('${next ? '关注' : '取消关注'}失败：${e.message}');
@@ -124,7 +138,8 @@ class _FollowButtonState extends State<FollowButton> {
 
   @override
   Widget build(BuildContext context) {
-    final self = AccountScope.of(context).profile?.userId == widget.userId;
+    final uid = widget.userId;
+    final self = uid != null && AccountScope.of(context).profile?.userId == uid;
     if (self) return const SizedBox.shrink();
     final density = widget.compact ? VisualDensity.compact : VisualDensity.standard;
     final onPressed = _busy ? null : _toggle;

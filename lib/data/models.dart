@@ -151,6 +151,7 @@ class Artist {
     this.songCount = 0,
     this.albumCount = 0,
     this.accountId,
+    this.followed = false,
   });
 
   final String id;
@@ -162,6 +163,9 @@ class Artist {
 
   /// 歌手入驻后绑定的网易云账号；没有为 null。
   final int? accountId;
+
+  /// 当前账号是否关注（收藏）了这个歌手。只有歌手详情接口带这个字段。
+  final bool followed;
 }
 
 /// 用户主页的资料（`/api/v1/user/detail`）。
