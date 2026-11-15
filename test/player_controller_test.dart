@@ -398,4 +398,23 @@ void main() {
       await player.pause();
     });
   });
+
+  test('playNext moves a song right after the current one, even in shuffle', () async {
+    await player.playQueue(queue, title: '测试');
+    player.cyclePlayMode(); // 列表 → 随机
+    expect(player.shuffle, isTrue);
+    await player.playNext(song('3'));
+    expect([for (final s in player.queue) s.id], ['1', '3', '2']);
+    expect(player.song.id, '1');
+    await player.next();
+    expect(player.song.id, '3');
+
+    await player.playNext(song('9'));
+    expect([for (final s in player.queue) s.id], ['1', '3', '9', '2']);
+  });
+
+  test('playNext on an empty player starts playing the song', () async {
+    await player.playNext(song('5'));
+    expect(player.song.id, '5');
+  });
 }

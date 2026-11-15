@@ -30,6 +30,13 @@ class PlaylistView extends StatelessWidget {
       queueTitle: p.name,
       sourceId: p.id,
       emptyText: '歌单是空的',
+      // 自己的歌单和「我喜欢」可以删歌。
+      onRemoveSongs: account.canEditTracks(p)
+          ? (songs) async {
+              await account.removeFromPlaylist(p, songs);
+              await tracks.removeCached(p.id, {for (final s in songs) s.id});
+            }
+          : null,
       header: (context, tracks, playAll) => CollectionHeader(
         title: p.name,
         seed: p.id,

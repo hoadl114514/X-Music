@@ -247,6 +247,7 @@ class PlayerController extends ChangeNotifier {
     if (isRadio) _applyMode(_savedMode);
     _extend = null;
     _queue = List.unmodifiable(songs);
+    _upNext = null;
     _queueTitle = title;
     _sourceId = sourceId;
     _history.clear();
@@ -302,6 +303,29 @@ class PlayerController extends ChangeNotifier {
       _extending = false;
     }
   }
+
+  /// 下一首播放：把 [song] 放到当前这首后面（队列里已有就挪过去）。随机模式下也先放它。
+  /// 队列为空时直接播放。
+  Future<void> playNext(Song song) async {
+    final cur = current;
+    if (cur == null) return playQueue([song], title: '播放列表');
+    if (cur.id == song.id) return;
+    final list = [
+      for (final s in _queue)
+        if (s.id != song.id) s,
+    ];
+    final i = list.indexWhere((s) => s.id == cur.id);
+    list.insert(i + 1, song);
+    _queue = List.unmodifiable(list);
+    _index = i;
+    // 队列位置变了，旧的随机历史对不上，清掉。
+    _history.clear();
+    _upNext = song.id;
+    notifyListeners();
+  }
+
+  /// 「下一首播放」指定的歌 id，切下一首时优先放它（随机模式也是）。
+  String? _upNext;
 
   /// 定时关闭：[after] 后暂停；传 null 取消。
   void setSleepTimer(Duration? after) {
@@ -413,6 +437,12 @@ class PlayerController extends ChangeNotifier {
     // 无尽队列放到最后一首：先取下一批，取到了就顺着放下去。
     if (isRadio && _index == _queue.length - 1) await _extendQueue();
     _history.add(_index);
+    final upNext = _upNext;
+    _upNext = null;
+    if (upNext != null) {
+      final i = _queue.indexWhere((s) => s.id == upNext);
+      if (i >= 0 && i != _index) return _load(i);
+    }
     if (_shuffle && _queue.length > 1) {
       var i = _index;
       while (i == _index) {

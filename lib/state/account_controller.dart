@@ -113,6 +113,21 @@ class AccountController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 从自己的歌单（含「我喜欢的音乐」）里删歌，成功后刷新歌曲数。
+  Future<void> removeFromPlaylist(Playlist playlist, List<Song> songs) async {
+    if (!isLoggedIn) throw const ApiException('登录后才能编辑歌单', code: 301);
+    if (songs.isEmpty) return;
+    await _api.removeFromPlaylist(playlist.id, [for (final s in songs) s.id]);
+    if (playlist.isLikedList) {
+      _liked.removeAll([for (final s in songs) s.id]);
+      notifyListeners();
+    }
+    await _reloadPlaylists().catchError((Object _) {});
+  }
+
+  /// 能删歌的歌单：自己创建的和「我喜欢的音乐」。
+  bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id;
+
   /// 启动时用保存的 Cookie 恢复登录。网络失败时保留 Cookie，下次再试。
   Future<void> restore() async {
     final saved = parseCookie(_settings.cookie);

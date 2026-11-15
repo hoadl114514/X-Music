@@ -66,7 +66,33 @@ MockClient _client(List<String> paths) => MockClient((r) async {
     });
   }
   if (path == '/api/v6/playlist/detail') {
-    return _json({'code': 200, 'playlist': _own});
+    return _json({
+      'code': 200,
+      'playlist': {
+        ..._own,
+        'trackIds': [
+          for (final id in [1, 2, 3]) {'id': id},
+        ],
+      },
+    });
+  }
+  if (path == '/api/v3/song/detail') {
+    return _json({
+      'code': 200,
+      'songs': [
+        for (final id in [1, 2, 3])
+          {
+            'id': id,
+            'name': '歌$id',
+            'dt': 200000,
+            'ar': [
+              {'id': 10, 'name': '歌手甲'},
+              {'id': 11, 'name': '歌手乙'},
+            ],
+            'al': {'id': 20, 'name': '专辑$id'},
+          },
+      ],
+    });
   }
   if (path == '/api/user/getfollows/1') {
     return _json({'code': 200, 'more': false, 'follow': []});
@@ -187,5 +213,41 @@ void main() {
     expect(find.text('发动态'), findsNothing);
     // 发完刷新列表：关注动态请求了两次。
     expect(paths.where((p) => p == '/api/v1/event/get'), hasLength(2));
+  });
+
+  testWidgets('song menu offers play next, like, collect, comments, share, artists, album', (
+    tester,
+  ) async {
+    await _pump(tester, _client([]), const PlaylistPage(playlist: _playlist));
+    expect(find.text('歌1'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多').first);
+    await tester.pumpAndSettle();
+    for (final t in ['下一首播放', '喜欢', '收藏到歌单', '从歌单中删除', '评论', '分享链接', '分享到动态']) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    expect(find.text('歌手：歌手甲 / 歌手乙'), findsOneWidget);
+    expect(find.text('专辑：专辑1'), findsOneWidget);
+  });
+
+  testWidgets('batch delete removes the selected songs from an own playlist', (tester) async {
+    final paths = <String>[];
+    await _pump(tester, _client(paths), const PlaylistPage(playlist: _playlist));
+    await tester.tap(find.text('批量删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('已选 0 首'), findsOneWidget);
+    await tester.tap(find.text('歌1'));
+    await tester.tap(find.text('歌3'));
+    await tester.pump();
+    expect(find.text('已选 2 首'), findsOneWidget);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 首歌'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(paths, contains('/api/playlist/manipulate/tracks'));
+    expect(find.text('歌1'), findsNothing);
+    expect(find.text('歌2'), findsOneWidget);
+    expect(find.text('歌3'), findsNothing);
+    expect(find.text('批量删除'), findsOneWidget);
   });
 }

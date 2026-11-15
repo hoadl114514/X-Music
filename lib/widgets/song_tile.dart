@@ -4,15 +4,32 @@ import '../data/format.dart';
 import '../data/models.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../pages/library/song_actions.dart';
 import 'copy_sheet.dart';
 import 'cover_art.dart';
 
 /// 歌曲列表的一行。正在播放的那首标题高亮；长按选择复制歌名或歌手。
 class SongTile extends StatelessWidget {
-  const SongTile({super.key, required this.song, required this.onTap, this.index, this.trailing});
+  const SongTile({
+    super.key,
+    required this.song,
+    required this.onTap,
+    this.index,
+    this.trailing,
+    this.onRemove,
+    this.selected,
+  });
 
   final Song song;
+
+  /// 点这一行。多选时是勾选 / 取消勾选。
   final VoidCallback onTap;
+
+  /// 「更多」菜单里的「从歌单中删除」；为 null 时不显示这一项。
+  final VoidCallback? onRemove;
+
+  /// 多选模式下是否选中；为 null 表示不在多选模式（显示「更多」按钮）。
+  final bool? selected;
 
   /// 序号（从 1 开始）。为 null 时不显示。
   final int? index;
@@ -26,11 +43,19 @@ class SongTile extends StatelessWidget {
     final titleColor = playing ? AppColors.accent : AppColors.textPrimary;
     return InkWell(
       onTap: onTap,
-      onLongPress: () => showCopySongSheet(context, song),
+      onLongPress: selected == null ? () => showCopySongSheet(context, song) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.fromLTRB(16, 8, selected == null ? 0 : 16, 8),
         child: Row(
           children: [
+            if (selected case final checked?)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  checked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                  color: checked ? AppColors.accent : AppColors.textMuted,
+                ),
+              ),
             if (index != null)
               SizedBox(
                 width: 32,
@@ -83,6 +108,13 @@ class SongTile extends StatelessWidget {
               trailing ?? formatDuration(song.duration),
               style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
+            if (selected == null)
+              IconButton(
+                tooltip: '更多',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+                onPressed: () => showSongActions(context, song, onRemove: onRemove),
+              ),
           ],
         ),
       ),
