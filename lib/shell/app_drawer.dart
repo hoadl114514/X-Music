@@ -191,11 +191,7 @@ class _StatusRow extends StatelessWidget {
 }
 
 class _RoundEntry extends StatelessWidget {
-  const _RoundEntry({
-    required this.onTap,
-    required this.circle,
-    required this.label,
-  });
+  const _RoundEntry({required this.onTap, required this.circle, required this.label});
 
   final VoidCallback onTap;
   final Widget circle;

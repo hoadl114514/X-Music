@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/state/player_controller.dart';
@@ -312,6 +314,52 @@ void main() {
     // 普通队列会退出 FM 模式。
     await player.playQueue(queue);
     expect(player.isRadio, isFalse);
+  });
+
+  test('radio never wraps back to the first song when no new songs come', () async {
+    var calls = 0;
+    await player.playRadio(() async {
+      calls++;
+      return [song('a'), song('b')]; // 第二次起全是重复的。
+    }, title: '私人 FM');
+    await player.next();
+    expect(player.song.id, 'b');
+    await player.next();
+    expect(player.song.id, 'b');
+    expect(calls, 2);
+  });
+
+  test('pressing next twice while the radio is fetching skips only once', () async {
+    final gate = Completer<List<Song>>();
+    var calls = 0;
+    await player.playRadio(() {
+      calls++;
+      return calls == 1 ? Future.value([song('a'), song('b')]) : gate.future;
+    }, title: '私人 FM');
+    await player.next();
+    expect(player.song.id, 'b');
+    final first = player.next();
+    final second = player.next();
+    gate.complete([song('c'), song('d')]);
+    await Future.wait([first, second]);
+    expect(player.song.id, 'c');
+    expect(calls, 2);
+  });
+
+  test('radio previous on the first song stays on it', () async {
+    await player.playRadio(() async => [song('a'), song('b')], title: '私人 FM');
+    await player.previous(restart: false);
+    expect(player.song.id, 'a');
+  });
+
+  test('previous without restart switches even after 3 seconds', () async {
+    await player.playQueue(queue, start: 1);
+    await player.seek(const Duration(seconds: 10));
+    await player.previous(restart: false);
+    expect(player.song.id, '1');
+    await player.seek(const Duration(seconds: 10));
+    await player.previous();
+    expect(player.song.id, '1');
   });
 
   test('skipAndRemoveCurrent drops the song and plays the next one', () async {

@@ -150,7 +150,6 @@ class PlayerController extends ChangeNotifier {
 
   /// 私人 FM 这类"无尽队列"：放到最后一首时调用它取下一批追加到队列。
   Future<List<Song>> Function()? _extend;
-  bool _extending = false;
 
   Timer? _sleepTimer;
   DateTime? _sleepAt;
@@ -283,10 +282,16 @@ class PlayerController extends ChangeNotifier {
     await _load(i.clamp(0, _queue.length - 1));
   }
 
-  Future<void> _extendQueue() async {
+  /// 取下一批。已经在取时等那一次，不另发请求（连按下一首时第二次不能当成「没取到」）。
+  Future<void> _extendQueue() => _extendFuture ??= _doExtend().whenComplete(() {
+    _extendFuture = null;
+  });
+
+  Future<void>? _extendFuture;
+
+  Future<void> _doExtend() async {
     final fetch = _extend;
-    if (fetch == null || _extending) return;
-    _extending = true;
+    if (fetch == null) return;
     try {
       final known = {for (final s in _queue) s.id};
       final more = [
@@ -299,8 +304,6 @@ class PlayerController extends ChangeNotifier {
       }
     } catch (e) {
       _notices.add('获取更多歌曲失败：$e');
-    } finally {
-      _extending = false;
     }
   }
 
@@ -353,10 +356,18 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> next() => _advance(auto: false);
 
-  Future<void> previous() {
-    // 和多数播放器一致：播放超过 3 秒时"上一首"先回到开头。
-    if (_position > const Duration(seconds: 3) || _queue.length <= 1) return seek(Duration.zero);
-    if (_shuffle && _history.isNotEmpty) return _load(_history.removeLast());
+  /// 上一首。[restart] 为 true 时和多数播放器一致：播放超过 3 秒先回到开头。
+  /// 通知栏、耳机的「上一首」传 false，直接切歌，免得看起来像卡在这一首。
+  Future<void> previous({bool restart = true}) {
+    if (_queue.length <= 1 || (restart && _position > const Duration(seconds: 3))) {
+      return seek(Duration.zero);
+    }
+    if (_history.isNotEmpty && (_shuffle || isRadio)) {
+      final i = _history.removeLast();
+      if (i >= 0 && i < _queue.length && i != _index) return _load(i);
+    }
+    // 私人 FM 是一路往后放的，第一首没有「上一首」，不能绕到队尾。
+    if (isRadio && _index == 0) return seek(Duration.zero);
     return _load((_index - 1 + _queue.length) % _queue.length);
   }
 
@@ -435,7 +446,22 @@ class PlayerController extends ChangeNotifier {
       return seek(Duration.zero).then((_) => play());
     }
     // 无尽队列放到最后一首：先取下一批，取到了就顺着放下去。
-    if (isRadio && _index == _queue.length - 1) await _extendQueue();
+    if (isRadio && _index == _queue.length - 1) {
+      final from = _index;
+      await _extendQueue();
+      // 等的时候已经切到别的歌了（例如又按了一次），这次就不再切。
+      if (_index != from) return;
+      // 没取到新歌：私人 FM 不绕回第一首，停在这里。
+      if (_index == _queue.length - 1) {
+        _notices.add('暂时没有更多推荐了，稍后再试');
+        if (auto) {
+          _playing = false;
+          _stopTicker();
+          notifyListeners();
+        }
+        return;
+      }
+    }
     _history.add(_index);
     final upNext = _upNext;
     _upNext = null;
