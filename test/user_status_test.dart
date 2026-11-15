@@ -237,7 +237,7 @@ void main() {
     expect(find.text('写代码'), findsOneWidget);
   });
 
-  testWidgets('the drawer status entry shows my status and opens the picker', (tester) async {
+  testWidgets('the drawer has no status or add-friend entry', (tester) async {
     await _pump(
       tester,
       _client(
@@ -247,12 +247,8 @@ void main() {
       ),
       home: Scaffold(body: AppDrawer(onSelect: (_) {})),
     );
-    expect(find.text('听歌状态'), findsOneWidget);
-    expect(find.text('学习中'), findsOneWidget);
-    expect(find.text('待开发'), findsNothing);
-
-    await tester.tap(find.text('听歌状态'));
-    await tester.pumpAndSettle();
-    expect(find.text('当前状态：学习中'), findsOneWidget);
+    expect(find.text('听歌状态'), findsNothing);
+    expect(find.text('学习中'), findsNothing);
+    expect(find.text('添加好友'), findsNothing);
   });
 }

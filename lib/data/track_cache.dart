@@ -113,6 +113,18 @@ class PlaylistTracks {
     }
   }
 
+  /// 从歌单 [playlistId] 的本地缓存里去掉 [songIds]（删歌成功后调用，免得重进时闪回旧列表）。
+  Future<void> removeCached(String playlistId, Set<String> songIds) async {
+    final cached = _memory[playlistId] ?? await _read(playlistId);
+    if (cached == null) return;
+    final kept = [
+      for (final s in cached)
+        if (!songIds.contains(s.id)) s,
+    ];
+    _memory[playlistId] = kept;
+    await _write(playlistId, kept);
+  }
+
   static bool _sameOrder(List<Song> a, List<Song> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {

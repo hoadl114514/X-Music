@@ -1,7 +1,7 @@
 name: netease_client
 description: "X-Music: a third-party NetEase Cloud Music client built with Flutter."
 publish_to: 'none'
-version: 0.1.1+11
+version: 0.1.2+12
 
 environment:
   sdk: ^3.13.7
@@ -13,6 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.6.0
+  image_picker: ^1.2.4
   just_audio: ^0.10.6
   path_provider: ^2.1.6
   pointycastle: ^4.0.0

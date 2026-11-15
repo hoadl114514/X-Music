@@ -26,7 +26,12 @@ class TrackListView extends StatefulWidget {
     this.emptyText = '这里还没有歌曲',
     this.trailingFor,
     this.searchable = true,
+    this.onRemoveSongs,
   });
+
+  /// 从列表里删歌（自己的歌单、我喜欢）。不为 null 时可以多选批量删除，每行菜单里也能删。
+  /// 失败时抛异常。
+  final Future<void> Function(List<Song> songs)? onRemoveSongs;
 
   /// 取歌曲列表。和 [watch] 二选一。
   final Future<List<Song>> Function()? load;
@@ -130,6 +135,61 @@ class _TrackListViewState extends State<TrackListView> {
     return _start(force: true);
   }
 
+  /// 多选模式下选中的歌 id；为 null 表示不在多选模式。
+  Set<String>? _selected;
+
+  void _toggle(String id) => setState(() {
+    final sel = _selected!;
+    if (!sel.remove(id)) sel.add(id);
+  });
+
+  /// 确认后删歌，成功后从列表里去掉。
+  Future<void> _remove(List<Song> songs) async {
+    final remove = widget.onRemoveSongs;
+    if (remove == null || songs.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: AppColors.surfaceHigh,
+        title: const Text('删除歌曲'),
+        content: Text(
+          songs.length == 1
+              ? '确定从歌单中删除「${songs.single.title}」？'
+              : '确定从歌单中删除选中的 ${songs.length} 首歌？',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('取消')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await remove(songs);
+    } catch (e) {
+      AppScope.toast('删除失败：${e is ApiException ? e.message : e}');
+      return;
+    }
+    if (!mounted) return;
+    final ids = {for (final s in songs) s.id};
+    setState(() {
+      _tracks = [
+        for (final t in _tracks ?? const <Song>[])
+          if (!ids.contains(t.id)) t,
+      ];
+      _selected = null;
+    });
+    AppScope.toast('已删除 ${songs.length} 首');
+  }
+
+  /// 多选时多选条固定在顶部，平时跟着列表滚走。
+  static Widget _pinIf(bool pinned, Widget child) =>
+      pinned ? PinnedHeaderSliver(child: child) : SliverToBoxAdapter(child: child);
+
   void _play(List<Song> tracks, int i) =>
       PlayerScope.read(context)
           .playQueue(tracks, start: i, title: widget.queueTitle, sourceId: widget.sourceId);
@@ -170,6 +230,28 @@ class _TrackListViewState extends State<TrackListView> {
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
                 ),
+              if (widget.onRemoveSongs != null && loaded && tracks.isNotEmpty)
+                _pinIf(
+                  _selected != null,
+                  _SelectBar(
+                    selected: _selected,
+                    total: tracks.length,
+                    onStart: () => setState(() => _selected = {}),
+                    onCancel: () => setState(() => _selected = null),
+                    onAll: () => setState(() {
+                      final sel = _selected!;
+                      if (sel.length == tracks.length) {
+                        sel.clear();
+                      } else {
+                        sel.addAll(tracks.map((t) => t.id));
+                      }
+                    }),
+                    onRemove: () => _remove([
+                      for (final t in tracks)
+                        if (_selected!.contains(t.id)) t,
+                    ]),
+                  ),
+                ),
               // 先显示着缓存、后台还在同步：头部下面一条细进度条。
               if (loaded && _loading)
                 const SliverToBoxAdapter(child: LinearProgressIndicator(minHeight: 2)),
@@ -207,11 +289,15 @@ class _TrackListViewState extends State<TrackListView> {
                   itemCount: shown?.length ?? tracks.length,
                   itemBuilder: (context, n) {
                     final i = shown?[n] ?? n;
+                    final song = tracks[i];
+                    final selected = _selected;
                     return SongTile(
-                      song: tracks[i],
+                      song: song,
                       index: i + 1,
                       trailing: widget.trailingFor?.call(i),
-                      onTap: () => _play(tracks, i),
+                      selected: selected?.contains(song.id),
+                      onTap: selected == null ? () => _play(tracks, i) : () => _toggle(song.id),
+                      onRemove: widget.onRemoveSongs == null ? null : () => _remove([song]),
                     );
                   },
                 ),
@@ -220,6 +306,63 @@ class _TrackListViewState extends State<TrackListView> {
           ),
         );
       },
+    );
+  }
+}
+
+/// 歌曲列表上方的多选条：平时是「批量删除」入口，多选时显示已选数量、全选、删除、完成。
+class _SelectBar extends StatelessWidget {
+  const _SelectBar({
+    required this.selected,
+    required this.total,
+    required this.onStart,
+    required this.onCancel,
+    required this.onAll,
+    required this.onRemove,
+  });
+
+  final Set<String>? selected;
+  final int total;
+  final VoidCallback onStart;
+  final VoidCallback onCancel;
+  final VoidCallback onAll;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final sel = selected;
+    return Container(
+      color: sel == null ? null : AppColors.surfaceHigh,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 48,
+      child: sel == null
+          ? Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onStart,
+                icon: const Icon(Icons.checklist_rounded, size: 20),
+                label: const Text('批量删除'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+              ),
+            )
+          : Row(
+              children: [
+                TextButton(onPressed: onAll, child: Text(sel.length == total ? '取消全选' : '全选')),
+                Expanded(
+                  child: Text(
+                    '已选 ${sel.length} 首',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                TextButton(
+                  onPressed: sel.isEmpty ? null : onRemove,
+                  style: TextButton.styleFrom(foregroundColor: AppColors.negative),
+                  child: const Text('删除'),
+                ),
+                TextButton(onPressed: onCancel, child: const Text('完成')),
+              ],
+            ),
     );
   }
 }

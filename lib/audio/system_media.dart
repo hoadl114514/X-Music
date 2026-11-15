@@ -148,7 +148,7 @@ class SystemMediaBridge extends BaseAudioHandler with SeekHandler {
   Future<void> skipToNext() => _player.next();
 
   @override
-  Future<void> skipToPrevious() => _player.previous();
+  Future<void> skipToPrevious() => _player.previous(restart: false);
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);

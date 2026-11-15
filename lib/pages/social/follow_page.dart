@@ -6,6 +6,7 @@ import '../../state/account_controller.dart';
 import '../../theme/app_theme.dart';
 import '../login_page.dart';
 import '../music/nav.dart';
+import 'compose_event_page.dart';
 import 'event_card.dart';
 import 'follow_list_page.dart';
 import 'paged_list.dart';
@@ -19,7 +20,32 @@ class MyEventsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final me = AccountScope.of(context).profile;
     if (me == null) return const _LoginPrompt(text: '登录后查看我的动态');
-    return UserEventList(key: ValueKey(me.userId), userId: me.userId, empty: '还没有发过动态');
+    return _MyEvents(key: ValueKey(me.userId), userId: me.userId);
+  }
+}
+
+/// 我的动态列表，顶部是发动态入口，发完刷新。
+class _MyEvents extends StatefulWidget {
+  const _MyEvents({super.key, required this.userId});
+
+  final int userId;
+
+  @override
+  State<_MyEvents> createState() => _MyEventsState();
+}
+
+class _MyEventsState extends State<_MyEvents> {
+  final _list = GlobalKey<PagedListViewState<UserEvent>>();
+
+  @override
+  Widget build(BuildContext context) {
+    final api = AppScope.of(context).api;
+    return PagedEvents(
+      listKey: _list,
+      empty: '还没有发过动态',
+      load: (lasttime) => api.userEvents(widget.userId, lasttime: lasttime),
+      header: [ComposeEventBar(onPosted: () => _list.currentState?.refresh())],
+    );
   }
 }
 
@@ -93,7 +119,10 @@ class _FeedState extends State<_Feed> {
           if (_firstLoad) {
             _firstLoad = false;
           } else {
-            setState(() => _friends = _loadFriends());
+            // 箭头函数会把 Future 当返回值交给 setState，这里必须用花括号。
+            setState(() {
+              _friends = _loadFriends();
+            });
           }
         }
         return api.followFeed(lasttime: lasttime);
@@ -105,6 +134,7 @@ class _FeedState extends State<_Feed> {
         FollowScene.friends => '关注的朋友还没有发动态',
       },
       header: [
+        ComposeEventBar(onPosted: () => _list.currentState?.refresh()),
         _FriendsRow(
           friends: _friends,
           onAll: () => FollowListPage.open(context, widget.me.userId, widget.me.nickname),

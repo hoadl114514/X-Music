@@ -11,6 +11,7 @@ import '../../widgets/playlist_card.dart';
 import '../comments/comments_page.dart';
 import '../login_page.dart';
 import '../music/nav.dart';
+import '../social/compose_event_page.dart';
 import '../../widgets/copy_sheet.dart';
 import 'lyrics_copy.dart';
 
@@ -342,6 +343,15 @@ class _SongMenu extends StatelessWidget {
                   final nav = Navigator.of(context);
                   nav.pop();
                   showAddToPlaylistSheet(nav.context, song);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.campaign_outlined, color: AppColors.textPrimary),
+                title: const Text('分享到动态'),
+                onTap: () {
+                  final nav = Navigator.of(context);
+                  nav.pop();
+                  ComposeEventPage.open(nav.context, song: song);
                 },
               ),
               ListTile(

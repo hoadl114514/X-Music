@@ -343,6 +343,78 @@ class NeteaseApi {
     {'id': playlistId},
   );
 
+  // ---------------------------------------------------------------- 歌单管理
+  //
+  // 接口参考 api-enhanced 的 playlist_create / playlist_delete / playlist_*_update /
+  // playlist_cover_update，都需要登录。
+
+  /// 新建歌单，返回新歌单（接口没给时为 null）。[private] 为 true 时是隐私歌单。
+  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+    final data = await _weapi('/api/playlist/create', {
+      'name': name,
+      'privacy': private ? '10' : '0',
+      'type': 'NORMAL',
+    });
+    return _parsePlaylist(data['playlist']);
+  }
+
+  /// 删除自己的歌单。
+  Future<void> deletePlaylist(String id) => _weapi('/api/playlist/remove', {'ids': '[$id]'});
+
+  /// 改歌单名。
+  Future<void> renamePlaylist(String id, String name) =>
+      _eapi('/api/playlist/update/name', {'id': id, 'name': name});
+
+  /// 改歌单简介（空字符串表示清空）。
+  Future<void> setPlaylistDescription(String id, String desc) =>
+      _eapi('/api/playlist/desc/update', {'id': id, 'desc': desc});
+
+  /// 换歌单封面：先把图片传到网易云的图床，再把图片 id 设成封面。返回新封面地址。
+  Future<String> setPlaylistCover(String id, List<int> image) async {
+    final img = await uploadImage(image);
+    await _weapi('/api/playlist/cover/update', {'id': id, 'coverImgId': img.id});
+    return img.url;
+  }
+
+  /// 上传一张图片（JPEG / PNG）到网易云图床（NOS），返回图片 id 和地址。
+  Future<({String id, String url})> uploadImage(List<int> image) async {
+    final png = image.length > 4 && image[0] == 0x89 && image[1] == 0x50 && image[2] == 0x4E;
+    final ext = png ? 'png' : 'jpg';
+    final alloc = await _weapi('/api/nos/token/alloc', {
+      'bucket': 'yyimgs',
+      'ext': ext,
+      'filename': 'cover.$ext',
+      'local': 'false',
+      'nos_product': '0',
+      'return_body': '{"code":200,"size":"\$(ObjectSize)"}',
+      'type': 'other',
+    });
+    final r = alloc['result'];
+    if (r is! Map || _str(r['objectKey']) == null || _str(r['token']) == null) {
+      throw const ApiException('获取上传凭证失败');
+    }
+    final key = r['objectKey'] as String;
+    final http.Response res;
+    try {
+      res = await _client
+          .post(
+            Uri.parse('https://nosup-hz1.127.net/yyimgs/$key?offset=0&complete=true&version=1.0'),
+            headers: {
+              'x-nos-token': r['token'] as String,
+              'Content-Type': png ? 'image/png' : 'image/jpeg',
+            },
+            body: image,
+          )
+          .timeout(const Duration(seconds: 60));
+    } catch (e) {
+      throw ApiException('图片上传失败：$e');
+    }
+    if (res.statusCode != 200) {
+      throw ApiException('图片上传失败：HTTP ${res.statusCode}', code: res.statusCode);
+    }
+    return (id: '${r['docId']}', url: 'https://p1.music.126.net/$key');
+  }
+
   // ---------------------------------------------------------------- 推荐 / 发现
 
   /// 每日推荐歌曲（需要登录）。
@@ -706,6 +778,19 @@ class NeteaseApi {
   /// 删除自己的动态。
   Future<void> deleteEvent(int eventId) =>
       _api('https://music.163.com/api/event/delete', {'id': '$eventId'});
+
+  /// 发动态（需要登录）。[type] 是附带资源的类型，[id] 是资源 id；纯文字动态不传。
+  ///
+  /// 接口参考 api-enhanced 的 share_resource。先走明文接口，被拒（非登录问题）时换 WEAPI 再试一次。
+  Future<void> shareEvent(String msg, {ShareType type = ShareType.none, String id = ''}) async {
+    final form = {'type': type.value, 'msg': msg, 'id': id};
+    try {
+      await _api('https://music.163.com/api/share/friends/resource', form);
+    } on ApiException catch (e) {
+      if (e.needsLogin) rethrow;
+      await _weapi('/api/share/friends/resource', form);
+    }
+  }
 
   /// 关注动态的列表字段叫 `event`，用户动态叫 `events`。
   EventPage _eventPage(Map<String, Object?> data) => EventPage(
@@ -1105,7 +1190,8 @@ class NeteaseApi {
       coverUrl: _https(_str(raw['coverImgUrl'])),
       creator: creator is Map ? _str(creator['nickname']) : null,
       creatorId: creator is Map ? _int(creator['userId']) : null,
-      description: _str(raw['updateFrequency']),
+      // 排行榜放更新频率，普通歌单放简介。
+      description: _str(raw['updateFrequency']) ?? _str('${raw['description'] ?? ''}'.trim()),
       subscribed: raw['subscribed'] == true,
       isLikedList: _int(raw['specialType']) == 5,
     );
@@ -1424,6 +1510,17 @@ String originalImage(String url) {
 
 /// 网易云图片按尺寸裁剪：`?param=200y200`。
 String sizedImage(String url, int px) => '$url${url.contains('?') ? '&' : '?'}param=${px}y$px';
+
+/// 动态附带的资源类型。
+enum ShareType {
+  none('noresource'),
+  song('song'),
+  playlist('playlist');
+
+  const ShareType(this.value);
+
+  final String value;
+}
 
 enum QrStatus { expired, waiting, scanned, confirmed }
 

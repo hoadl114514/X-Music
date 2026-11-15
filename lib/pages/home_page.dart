@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
+import 'library/playlist_editor.dart';
 import 'login_page.dart';
 import 'music/daily_songs_page.dart';
 import 'now_playing/now_playing_page.dart';
@@ -83,7 +84,16 @@ class HomePage extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 32),
-                const _SectionTitle('我的歌单'),
+                _SectionTitle(
+                  '我的歌单',
+                  trailing: account.isLoggedIn
+                      ? TextButton.icon(
+                          onPressed: () => showCreatePlaylistDialog(context),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text('新建'),
+                        )
+                      : null,
+                ),
                 const SizedBox(height: 16),
                 if (!account.isLoggedIn)
                   const SizedBox(height: 220, child: LoginPrompt(message: '登录后查看你的歌单'))
@@ -176,9 +186,12 @@ class _Greeting extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title);
+  const _SectionTitle(this.title, {this.trailing});
 
   final String title;
+
+  /// 标题右侧的按钮（如「新建」）。
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +207,7 @@ class _SectionTitle extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(title, style: Theme.of(context).textTheme.titleLarge),
+        if (trailing case final t?) ...[const Spacer(), t],
       ],
     );
   }
