@@ -83,6 +83,5 @@ flutter test        # 全部离线，不访问网络
 
 ## 致谢
 
-- [Suxiaoqinx/Netease_url](https://github.com/Suxiaoqinx/Netease_url)（MIT）：EAPI 加密与播放地址接口的参考。
 - [NeteaseCloudMusicApiEnhanced/api-enhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)（MIT）网易云API参考
 - [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper)（Apache-2.0）：QQ 音乐歌词接口与 QRC 解密算法。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
