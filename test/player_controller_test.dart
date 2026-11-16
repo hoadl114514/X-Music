@@ -15,6 +15,7 @@ void main() {
   final queue = [song('1'), song('2'), song('3')];
 
   setUp(() async {
+    PlayerController.extendRetryDelay = const Duration(milliseconds: 1);
     engine = FakeEngine();
     backend = FakeBackend();
     settings = await testSettings();
@@ -308,38 +309,59 @@ void main() {
     expect(engine.loaded.last, contains('/3/'));
   });
 
-  test('radio fetches the next batch at the end and skips duplicates', () async {
+  test('radio prefetches the next batch before the last song and skips duplicates', () async {
     final batches = [
       [song('a'), song('b')],
       [song('b'), song('c')],
     ];
     var calls = 0;
-    await player.playRadio(() async => batches[calls++ % batches.length], title: '私人 FM');
+    await player.playRadio(
+      () async => calls < batches.length ? batches[calls++] : <Song>[],
+      title: '私人 FM',
+    );
     expect(player.isRadio, isTrue);
-    expect(player.queue.map((s) => s.id), ['a', 'b']);
+    // 只剩一首没放时就提前取了下一批，去重后追加 c。
+    await pumpEventQueue();
+    expect(player.queue.map((s) => s.id), ['a', 'b', 'c']);
     await player.next();
     expect(player.song.id, 'b');
-    await player.next(); // 到底了：再取一批，去重后追加 c。
-    expect(player.queue.map((s) => s.id), ['a', 'b', 'c']);
+    await player.next();
     expect(player.song.id, 'c');
-    expect(calls, 2);
 
     // 普通队列会退出 FM 模式。
     await player.playQueue(queue);
     expect(player.isRadio, isFalse);
   });
 
-  test('radio never wraps back to the first song when no new songs come', () async {
+  test('radio retries when the next batch is all duplicates', () async {
     var calls = 0;
     await player.playRadio(() async {
       calls++;
-      return [song('a'), song('b')]; // 第二次起全是重复的。
+      // 第二、三次全是重复的，第四次才有新歌。
+      return calls < 4 ? [song('a'), song('b')] : [song('b'), song('c')];
     }, title: '私人 FM');
     await player.next();
+    await player.next();
+    expect(player.song.id, 'c');
+  });
+
+  test('radio never wraps back to the first song when no new songs come', () async {
+    await player.playRadio(
+      () async => [song('a'), song('b')], // 第二次起全是重复的。
+      title: '私人 FM',
+    );
+    await player.next();
     expect(player.song.id, 'b');
     await player.next();
     expect(player.song.id, 'b');
-    expect(calls, 2);
+  });
+
+  test('radio first song failing skips forward without wrapping', () async {
+    backend.unavailable.add('a');
+    await player.playRadio(() async => [song('a'), song('b')], title: '私人 FM');
+    await pumpEventQueue();
+    expect(player.isRadio, isTrue);
+    expect(player.song.id, 'b');
   });
 
   test('pressing next twice while the radio is fetching skips only once', () async {
@@ -356,7 +378,7 @@ void main() {
     gate.complete([song('c'), song('d')]);
     await Future.wait([first, second]);
     expect(player.song.id, 'c');
-    expect(calls, 2);
+    expect(player.queue.map((s) => s.id), ['a', 'b', 'c', 'd']);
   });
 
   test('radio previous on the first song stays on it', () async {

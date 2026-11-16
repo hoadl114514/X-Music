@@ -246,12 +246,30 @@ class PlayerController extends ChangeNotifier {
   // ---------------------------------------------------------------- 队列
 
   /// 替换队列并从 [start] 开始播放。[sourceId] 是来源歌单 / 专辑的 id。
-  Future<void> playQueue(List<Song> songs, {int start = 0, String title = '', String? sourceId}) {
+  Future<void> playQueue(List<Song> songs, {int start = 0, String title = '', String? sourceId}) =>
+      _replaceQueue(songs, start: start, title: title, sourceId: sourceId);
+
+  /// 换队列。[extend] 不为 null 时是无尽队列（私人 FM）。
+  Future<void> _replaceQueue(
+    List<Song> songs, {
+    int start = 0,
+    String title = '',
+    String? sourceId,
+    Future<List<Song>> Function()? extend,
+  }) {
     if (songs.isEmpty) return Future.value();
     _reportListened();
     // 私人 FM 期间关掉了随机，换回普通队列时恢复上次选的模式。
-    if (isRadio) _applyMode(_savedMode);
-    _extend = null;
+    if (isRadio && extend == null) _applyMode(_savedMode);
+    _extend = extend;
+    _extendFuture = null;
+    _radioSeen
+      ..clear()
+      ..addAll([
+        if (extend != null)
+          for (final s in songs) s.id,
+      ]);
+    if (extend != null) _shuffle = false;
     _queue = List.unmodifiable(songs);
     _upNext = null;
     _queueTitle = title;
@@ -270,10 +288,9 @@ class PlayerController extends ChangeNotifier {
       _notices.add('$title 暂时没有可播放的歌曲');
       return;
     }
-    await playQueue(first, title: title);
-    _extend = fetch;
-    _shuffle = false;
-    notifyListeners();
+    // 先标成无尽队列再开始放：第一首加载失败自动跳下一首时，也要按私人 FM 的规则走，
+    // 不能当成普通队列绕回第一首。
+    await _replaceQueue(first, title: title, extend: fetch);
   }
 
   /// 从队列里去掉当前这首并跳到下一首（私人 FM 的「不喜欢」）。
@@ -296,23 +313,42 @@ class PlayerController extends ChangeNotifier {
 
   Future<void>? _extendFuture;
 
+  /// 这次私人 FM 里出现过的歌（含已经「不喜欢」移出队列的），取下一批时去重用。
+  final _radioSeen = <String>{};
+
+  /// 取下一批的最多尝试次数。私人 FM 常常返回已经放过的歌，去重后为空时再取一次；网络失败也重试。
+  static const _extendAttempts = 3;
+
   Future<void> _doExtend() async {
     final fetch = _extend;
     if (fetch == null) return;
-    try {
-      final known = {for (final s in _queue) s.id};
-      final more = [
-        for (final s in await fetch())
-          if (!known.contains(s.id)) s,
-      ];
-      if (more.isNotEmpty && identical(fetch, _extend)) {
-        _queue = List.unmodifiable([..._queue, ...more]);
-        notifyListeners();
+    Object? error;
+    for (var attempt = 0; attempt < _extendAttempts; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(extendRetryDelay * attempt);
+      if (!identical(fetch, _extend)) return;
+      try {
+        final batch = await fetch();
+        if (!identical(fetch, _extend)) return;
+        final more = [
+          for (final s in batch)
+            if (_radioSeen.add(s.id)) s,
+        ];
+        if (more.isNotEmpty) {
+          _queue = List.unmodifiable([..._queue, ...more]);
+          notifyListeners();
+          return;
+        }
+        error = null;
+      } catch (e) {
+        error = e;
       }
-    } catch (e) {
-      _notices.add('获取更多歌曲失败：$e');
     }
+    if (error != null) _notices.add('获取更多歌曲失败：$error');
   }
+
+  /// 取下一批失败或全是重复时，重试前等多久（第 n 次重试等 n 倍）。测试里可以调短。
+  @visibleForTesting
+  static Duration extendRetryDelay = const Duration(milliseconds: 800);
 
   /// 下一首播放：把 [song] 放到当前这首后面（队列里已有就挪过去）。随机模式下也先放它。
   /// 队列为空时直接播放。
@@ -512,6 +548,8 @@ class PlayerController extends ChangeNotifier {
       _errorRetries = 0;
     }
     _index = index;
+    // 私人 FM 放到倒数第二首就提前取下一批，切到最后一首之后不用等网络。
+    if (isRadio && index >= _queue.length - 2) unawaited(_extendQueue());
     _ready = false;
     final song = this.song;
     _position = startAt;
