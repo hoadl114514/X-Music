@@ -25,6 +25,9 @@ class ApiException implements Exception {
   /// 301 / 302：未登录或登录已失效。
   bool get needsLogin => code == 301 || code == 302;
 
+  /// -460 / -462：网络环境或操作被风控。
+  bool get riskControl => code == -460 || code == -462;
+
   @override
   String toString() => code == null ? message : '$message（code=$code）';
 }
@@ -745,10 +748,25 @@ class NeteaseApi {
 
   // ---------------------------------------------------------------- 关注 / 粉丝
 
-  /// 关注 / 取消关注（需要登录），和参考实现一样走网页端 WEAPI。
-  /// 目前网易云对官方 App 以外的关注请求一律返回 250「关注异常」（网页版也是），取消关注正常。
-  Future<void> setFollowed(int userId, bool follow) =>
-      _weapi('/api/user/${follow ? 'follow' : 'delfollow'}/$userId', const {});
+  /// 关注 / 取消关注（需要登录）。
+  ///
+  /// 网易云对官方 App 以外的关注请求常返回 250「关注异常」（网页版也是），取消关注正常。
+  /// PC 客户端没有单独的关注接口，用的也是 `/api/user/follow/{id}`，只是加密方式和身份不同。
+  /// 所以关注按顺序试：安卓 XEAPI（带易盾 token）→ PC EAPI → 网页 WEAPI（api-enhanced 的做法），
+  /// 服务端拒绝才换下一种；遇到风控（-460 / -462）、登录失效或网络错误立即停，免得越试越被风控。
+  /// 取消关注只走 WEAPI。
+  Future<void> setFollowed(int userId, bool follow) {
+    if (!follow) return _weapi('/api/user/delfollow/$userId', const {});
+    final path = '/api/user/follow/$userId';
+    return _firstAccepted([
+      () async {
+        final token = await antiCheatToken();
+        await _xeapi(path, const {}, headers: {'X-antiCheatToken': ?token});
+      },
+      () => _eapi(path, const {}),
+      () => _weapi(path, const {}),
+    ]);
+  }
 
   /// [userId] 关注的人，按 offset 翻页。
   Future<SocialUserPage> userFollows(int userId, {int offset = 0, int limit = 30}) async {
@@ -1404,21 +1422,26 @@ class NeteaseApi {
   /// 先试 [primary]，服务端报错时用 [fallback] 再试；两次都失败报 [primary] 的错误。
   ///
   /// 用于和 api-enhanced 对齐传输方式的写操作：新方式不通时退回原来能用的方式。
-  /// 登录失效和网络错误不重试：前者重试没用，后者服务端可能已经处理过，重试会重复操作。
-  static Future<T> _withFallback<T>(
-    Future<T> Function() primary,
-    Future<T> Function() fallback,
-  ) async {
-    try {
-      return await primary();
-    } on ApiException catch (e) {
-      if (e.needsLogin || e.network) rethrow;
+  static Future<T> _withFallback<T>(Future<T> Function() primary, Future<T> Function() fallback) =>
+      _firstAccepted([primary, fallback]);
+
+  /// 按顺序试 [tries]，返回第一个成功的结果；都失败时报第一个带错误码的错误。
+  ///
+  /// 登录失效、网络错误和风控（-460 / -462）不往下试：前者重试没用，网络错误时服务端可能已经处理过，
+  /// 风控时多试只会让账号更像异常。
+  static Future<T> _firstAccepted<T>(List<Future<T> Function()> tries) async {
+    ApiException? first;
+    for (final attempt in tries) {
       try {
-        return await fallback();
-      } on ApiException {
-        throw e;
+        return await attempt();
+      } on ApiException catch (e) {
+        // 停下时报让它停下的那个错误（要登录、风控、断网），用户才知道该做什么。
+        if (e.needsLogin || e.network || e.riskControl) rethrow;
+        // 优先报服务端给了错误码的那个（比如公钥没取到时，报后面接口的「关注异常」）。
+        if (first == null || (first.code == null && e.code != null)) first = e;
       }
     }
+    throw first!;
   }
 
   // ---------------------------------------------------------------- XEAPI

@@ -88,7 +88,7 @@ MockClient _client({List<http.Request>? sent}) => MockClient((r) async {
     sent?.add(r);
     return _json({'code': 200, 'message': 'success', 'data': null});
   }
-  if (path == '/weapi/user/follow/2') {
+  if (path.endsWith('/user/follow/2')) {
     return http.Response.bytes(utf8.encode(jsonEncode({'code': 250, 'message': '关注异常'})), 200);
   }
   if (path == '/eapi/msg/private/send') {
