@@ -23,6 +23,12 @@ NeteaseApi _api(Map<String, Object> routes, {List<http.Request>? seen}) => Netea
   }),
 );
 
+http.Response _json(Object body) => http.Response(
+  jsonEncode(body),
+  200,
+  headers: {'content-type': 'application/json; charset=utf-8'},
+);
+
 Map<String, Object?> _user(int id, {int userType = 0}) => {
   'userId': id,
   'nickname': '用户$id',
@@ -123,18 +129,47 @@ void main() {
     expect(seen.single.bodyFields['time'], '999');
   });
 
-  test('follow and unfollow go through WEAPI with an encrypted form', () async {
+  test('follow tries XEAPI, then PC EAPI, then WEAPI; unfollow goes through WEAPI', () async {
     final seen = <http.Request>[];
-    final api = _api({}, seen: seen);
+    final api = NeteaseApi(
+      cookies: const {'MUSIC_U': 'u'},
+      client: MockClient((r) async {
+        seen.add(r);
+        if (r.url.host == 'ac.dun.163yun.com') return http.Response('x', 200);
+        // 公钥注册失败，XEAPI 这一步报错，接着试 EAPI。
+        if (r.url.path == '/api/bsr/sk/get') return _json({'code': 400});
+        if (r.url.path.startsWith('/eapi/')) return _json({'code': 250, 'message': '关注异常'});
+        return _json({'code': 200});
+      }),
+    );
     await api.setFollowed(42, true);
     await api.setFollowed(42, false);
-    expect(seen.map((r) => r.url.toString()), [
+    expect(seen.where((r) => r.url.host != 'ac.dun.163yun.com').map((r) => r.url.toString()), [
+      'https://interface.music.163.com/api/bsr/sk/get',
+      'https://interface3.music.163.com/eapi/user/follow/42',
       'https://music.163.com/weapi/user/follow/42',
       'https://music.163.com/weapi/user/delfollow/42',
     ]);
-    final form = seen.first.bodyFields;
+    final form = seen.last.bodyFields;
     expect(form.keys, unorderedEquals(['params', 'encSecKey']));
     expect(form['encSecKey'], hasLength(256));
+  });
+
+  test('follow stops at risk control instead of trying more transports', () async {
+    final seen = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: const {'MUSIC_U': 'u'},
+      client: MockClient((r) async {
+        seen.add(r);
+        if (r.url.host == 'ac.dun.163yun.com') return http.Response('x', 200);
+        return _json({'code': -462, 'message': '检测到您的网络环境存在风险'});
+      }),
+    );
+    await expectLater(
+      api.setFollowed(42, true),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', -462)),
+    );
+    expect(seen.where((r) => r.url.path.contains('/user/follow/')), isEmpty);
   });
 
   test('artist follow goes through WEAPI artist/sub and artist/unsub', () async {
@@ -335,7 +370,8 @@ void main() {
     final api = _api({}, seen: seen);
     await api.likeEvent('A_EV_2_1_10', true);
     await api.likeEvent('A_EV_2_1_10', false);
-    expect(seen.map((r) => r.url.path), ['/api/resource/like', '/api/resource/unlike']);
-    expect(seen.first.bodyFields['threadId'], 'A_EV_2_1_10');
+    // 和 api-enhanced 一样走网页端 WEAPI。
+    expect(seen.map((r) => r.url.path), ['/weapi/resource/like', '/weapi/resource/unlike']);
+    expect(seen.first.bodyFields.keys, containsAll(['params', 'encSecKey']));
   });
 }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:netease_client/api/client_identity.dart';
 import 'package:netease_client/api/cookies.dart';
 import 'package:netease_client/api/netease_api.dart';
 import 'package:netease_client/api/xeapi_crypto.dart';
@@ -33,6 +34,7 @@ Uint8List _aes(List<int> key, List<int> data) =>
 MockClient _xeapiClient(
   Map<String, Object?> Function(http.Request r) handler, {
   List<http.Request>? requests,
+  bool Function(http.Request r)? plain,
 }) {
   final server = Uint8List.fromList(List.generate(32, (i) => i * 7 + 3));
   return MockClient((r) async {
@@ -54,6 +56,7 @@ MockClient _xeapiClient(
         },
       });
     }
+    if (plain?.call(r) ?? false) return json(handler(r));
     final body = jsonEncode(handler(r));
     return http.Response.bytes(_aes(utf8.encode('e82ckenh8dichen8'), utf8.encode(body)), 200);
   });
@@ -68,20 +71,75 @@ void main() {
     expect(encodeCookie({'a': '1', 'b': '2'}), 'a=1; b=2');
   });
 
-  test('requests carry device defaults plus the user cookie', () async {
+  test('plain requests speak as the PC client; identity fields override the user cookie', () async {
     late http.Request seen;
     final api = NeteaseApi(
       client: MockClient((r) async {
         seen = r;
         return json({'code': 200, 'profile': null});
       }),
-      cookies: {'MUSIC_U': 'secret', 'os': 'android'},
+      cookies: {'MUSIC_U': 'secret', 'os': 'android', 'appver': '8.0'},
+      deviceId: 'DEV1',
     );
     expect(await api.account(), isNull);
-    final cookie = seen.headers['Cookie']!;
-    expect(cookie, contains('MUSIC_U=secret'));
-    expect(cookie, contains('os=android')); // 用户的同名字段优先。
-    expect(cookie, contains('deviceId=pyncm!'));
+    final cookie = parseCookie(seen.headers['Cookie']!);
+    expect(cookie['MUSIC_U'], 'secret');
+    // 身份字段以 PC 客户端为准，和 UA 对得上。
+    expect(cookie['os'], 'pc');
+    expect(cookie['appver'], ClientProfile.pc.appver);
+    expect(cookie['osver'], ClientProfile.pc.osver);
+    expect(cookie['channel'], 'netease');
+    expect(cookie['deviceId'], 'DEV1');
+    expect(seen.headers['User-Agent'], ClientProfile.pc.userAgent);
+  });
+
+  test('every transport shares one device id', () async {
+    final requests = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: {'MUSIC_U': 'u'},
+      deviceId: 'DEV2',
+      client: _xeapiClient(
+        (r) => {'code': 200, 'data': []},
+        requests: requests,
+        plain: (r) => !r.url.path.startsWith('/xeapi/'),
+      ),
+    );
+    await api.songUrl('1', AudioQuality.hires);
+    await api.setLiked('1', true);
+    await api.setFollowed(1, false);
+    final register = requests.firstWhere((r) => r.url.path == '/api/bsr/sk/get');
+    expect(register.bodyFields['deviceId'], 'DEV2');
+    final xeapi = requests.firstWhere((r) => r.url.path.startsWith('/xeapi/'));
+    expect(xeapi.headers['x-deviceid'], 'DEV2');
+    expect(xeapi.headers['User-Agent'], ClientProfile.android.userAgent);
+    expect(parseCookie(xeapi.headers['Cookie']!)['os'], 'android');
+    final eapi = requests.firstWhere((r) => r.url.path.startsWith('/eapi/'));
+    expect(parseCookie(eapi.headers['Cookie']!)['deviceId'], 'DEV2');
+    final weapi = requests.firstWhere((r) => r.url.path.startsWith('/weapi/'));
+    expect(parseCookie(weapi.headers['Cookie']!)['deviceId'], 'DEV2');
+    expect(weapi.headers['User-Agent'], ClientProfile.web.userAgent);
+  });
+
+  test('a device id in the user cookie wins everywhere', () async {
+    final requests = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: {'deviceId': 'FROMCOOKIE'},
+      deviceId: 'LOCAL',
+      client: _xeapiClient((r) => {'code': 200, 'data': []}, requests: requests),
+    );
+    expect(api.deviceId, 'FROMCOOKIE');
+    await api.songUrl('1', AudioQuality.hires);
+    expect(requests.first.bodyFields['deviceId'], 'FROMCOOKIE');
+    // 换了设备号，XEAPI 公钥要重新注册。
+    api.cookies = {'deviceId': 'OTHER'};
+    await api.songUrl('1', AudioQuality.hires);
+    expect(
+      [
+        for (final r in requests.where((r) => r.url.path == '/api/bsr/sk/get'))
+          r.bodyFields['deviceId'],
+      ],
+      ['FROMCOOKIE', 'OTHER'],
+    );
   });
 
   test('searchSongs parses artists, album cover and alias', () async {

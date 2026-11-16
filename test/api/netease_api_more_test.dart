@@ -27,6 +27,16 @@ NeteaseApi apiWith(
   }),
 );
 
+/// 解出 EAPI 请求体：接口路径和 JSON 参数。
+({String path, Map<String, Object?> json}) eapiPayload(http.Request r) {
+  final hex = r.bodyFields['params']!;
+  final bytes = Uint8List.fromList([
+    for (var i = 0; i < hex.length; i += 2) int.parse(hex.substring(i, i + 2), radix: 16),
+  ]);
+  final plain = EapiCrypto.decrypt(bytes).split('-36cd479b6b5-');
+  return (path: plain.first, json: jsonDecode(plain[1]) as Map<String, Object?>);
+}
+
 Map<String, Object> rawSong(int id, {int artistId = 7, int albumId = 9}) => {
   'id': id,
   'name': '歌$id',
@@ -210,9 +220,12 @@ void main() {
       '/manipulate/tracks': {'code': 200},
     }, seen: seen);
     await ok.addToPlaylist('100', ['1', '2']);
-    expect(seen.last.bodyFields, containsPair('op', 'add'));
-    expect(seen.last.bodyFields, containsPair('pid', '100'));
-    expect(seen.last.bodyFields, containsPair('trackIds', '[1,2]'));
+    // 和 api-enhanced 一样先走 EAPI。
+    expect(seen.single.url.path, '/eapi/playlist/manipulate/tracks');
+    final json = eapiPayload(seen.single).json;
+    expect(json, containsPair('op', 'add'));
+    expect(json, containsPair('pid', '100'));
+    expect(json, containsPair('trackIds', '[1,2]'));
 
     final blocked = apiWith({
       '/manipulate/tracks': {'code': -462, 'message': '检测到您的网络环境存在风险，请稍后再试'},
@@ -451,8 +464,12 @@ void main() {
       },
     }, seen: seen);
     final c = await api.postComment('R_SO_4_1', '你好', replyTo: 11);
-    expect(seen.single.url.path, endsWith('/comments/reply'));
-    expect(seen.single.bodyFields, {'threadId': 'R_SO_4_1', 'content': '你好', 'commentId': '11'});
+    expect(seen.single.url.path, '/eapi/resource/comments/reply');
+    final (:path, :json) = eapiPayload(seen.single);
+    expect(path, '/api/resource/comments/reply');
+    expect(json, containsPair('threadId', 'R_SO_4_1'));
+    expect(json, containsPair('content', '你好'));
+    expect(json, containsPair('commentId', '11'));
     expect(c?.id, 99);
   });
 
@@ -496,5 +513,56 @@ void main() {
     final header = jsonDecode(payload(seen[1])['header']! as String) as Map;
     expect(header['os'], 'osx');
     expect(header['MUSIC_U'], 'u');
+  });
+
+  test('writes aligned with api-enhanced fall back to the plain API when refused', () async {
+    final seen = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: const {'MUSIC_U': 'u'},
+      client: MockClient((r) async {
+        seen.add(r);
+        final refused = !r.url.path.startsWith('/api/');
+        return http.Response(
+          jsonEncode(refused ? {'code': 400, 'message': '不支持'} : {'code': 200}),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+    await api.addToPlaylist('100', ['1']);
+    await api.setPlaylistSubscribed('100', true);
+    await api.deleteComment('R_SO_4_1', 5);
+    await api.likeComment('R_SO_4_1', 5, true);
+    await api.deleteEvent(9);
+    await api.fmTrash('3');
+    expect(seen.map((r) => r.url.path), [
+      '/eapi/playlist/manipulate/tracks',
+      '/api/playlist/manipulate/tracks',
+      '/eapi/playlist/subscribe',
+      '/api/playlist/subscribe',
+      '/eapi/resource/comments/delete',
+      '/api/resource/comments/delete',
+      '/weapi/v1/comment/like',
+      '/api/v1/comment/like',
+      '/weapi/event/delete',
+      '/api/event/delete',
+      '/weapi/radio/trash/add',
+      '/api/radio/trash/add',
+    ]);
+  });
+
+  test('a network failure is not retried, so a write is never sent twice', () async {
+    var calls = 0;
+    final api = NeteaseApi(
+      client: MockClient((r) async {
+        calls++;
+        throw http.ClientException('timeout');
+      }),
+    );
+    await expectLater(
+      api.postComment('R_SO_4_1', 'hi'),
+      throwsA(isA<ApiException>().having((e) => e.network, 'network', isTrue)),
+    );
+    expect(calls, 1);
   });
 }
