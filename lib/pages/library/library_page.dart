@@ -17,8 +17,8 @@ import 'playlist_page.dart';
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
-  /// 打开「我喜欢的音乐」歌单页。
-  static void openLiked(BuildContext context, Playlist liked) =>
+  /// 打开「我喜欢的音乐」歌单页，返回时完成。
+  static Future<void> openLiked(BuildContext context, Playlist liked) =>
       Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: liked)));
 
@@ -28,14 +28,21 @@ class LibraryPage extends StatefulWidget {
 
 class _LibraryPageState extends State<LibraryPage> {
   int? _visit;
+  bool _seen = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 切回音乐库时后台刷新歌单列表（歌曲数、在别处新建 / 收藏的歌单）。
+    // 进入和切回音乐库时都在后台刷新歌单列表（歌曲数、在别处新建 / 收藏的歌单），
+    // 列表先显示已有的，不清空。
     final visit = PageVisit.of(context);
-    if (_visit != null && visit != _visit) _reload();
-    _visit = visit;
+    if (!_seen || visit != _visit) {
+      _seen = true;
+      _visit = visit;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _reload();
+      });
+    }
   }
 
   Future<void> _reload() async {
@@ -67,7 +74,7 @@ class _LibraryPageState extends State<LibraryPage> {
         children: [
           Padding(
             padding: EdgeInsets.symmetric(horizontal: hPad),
-            child: _LikedCard(playlist: liked),
+            child: _LikedCard(playlist: liked, onReturned: _reload),
           ),
           const SizedBox(height: 24),
           _SectionHeader(
@@ -86,6 +93,8 @@ class _LibraryPageState extends State<LibraryPage> {
             for (final p in created)
               PlaylistTile(
                 playlist: p,
+                // 从歌单页回来也刷新（里面可能删了歌、改了信息）。
+                onReturned: _reload,
                 subtitle: '${p.trackCount} 首',
                 trailing: IconButton(
                   tooltip: '管理歌单',
@@ -101,6 +110,8 @@ class _LibraryPageState extends State<LibraryPage> {
             for (final p in collected)
               PlaylistTile(
                 playlist: p,
+                // 从歌单页回来也刷新（里面可能删了歌、改了信息）。
+                onReturned: _reload,
                 trailing: IconButton(
                   tooltip: '管理歌单',
                   icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
@@ -176,9 +187,10 @@ Future<void> _unsubscribe(BuildContext context, Playlist playlist) async {
 
 /// 「我喜欢的音乐」大卡片，点了进歌单。
 class _LikedCard extends StatelessWidget {
-  const _LikedCard({required this.playlist});
+  const _LikedCard({required this.playlist, required this.onReturned});
 
   final Playlist? playlist;
+  final VoidCallback onReturned;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +200,7 @@ class _LikedCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.panel),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: p == null ? null : () => LibraryPage.openLiked(context, p),
+        onTap: p == null ? null : () => LibraryPage.openLiked(context, p).then((_) => onReturned()),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(

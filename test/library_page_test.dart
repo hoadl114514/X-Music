@@ -84,6 +84,8 @@ void main() {
 
   testWidgets('library lists liked, created and collected playlists', (tester) async {
     await pump(tester);
+    // 登录时拉一次，进入音乐库后台再刷新一次。
+    expect(paths.where((p) => p == '/api/user/playlist').length, 2);
     expect(find.text('我喜欢的音乐'), findsOneWidget);
     expect(find.text('321 首'), findsOneWidget);
     expect(find.text('创建的歌单'), findsOneWidget);

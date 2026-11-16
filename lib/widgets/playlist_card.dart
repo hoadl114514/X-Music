@@ -154,7 +154,16 @@ class PlaylistCard extends StatelessWidget {
 
 /// 歌单列表的一行（搜索结果、用户主页等）。
 class PlaylistTile extends StatelessWidget {
-  const PlaylistTile({super.key, required this.playlist, this.trailing, this.subtitle});
+  const PlaylistTile({
+    super.key,
+    required this.playlist,
+    this.trailing,
+    this.subtitle,
+    this.onReturned,
+  });
+
+  /// 从歌单页返回时调用（音乐库用来刷新歌曲数）。
+  final VoidCallback? onReturned;
 
   final Playlist playlist;
 
@@ -192,7 +201,8 @@ class PlaylistTile extends StatelessWidget {
       trailing: trailing,
       onTap: () =>
           Navigator.of(context)
-              .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: p))),
+              .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: p)))
+              .then((_) => onReturned?.call()),
     );
   }
 }
