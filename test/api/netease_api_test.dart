@@ -211,6 +211,73 @@ void main() {
     expect(paths, ['/api/bsr/sk/get']);
   });
 
+  /// XEAPI 服务端 + 易盾 token 接口。
+  MockClient shareClient(
+    Map<String, Object?> Function(http.Request r) xeapi, {
+    List<http.Request>? requests,
+    Map<String, Object?> plain = const {'code': 200},
+  }) {
+    final x = _xeapiClient(xeapi, requests: requests);
+    return MockClient((r) async {
+      if (r.url.host == 'ac.dun.163yun.com') {
+        requests?.add(r);
+        return http.Response('null([200,1794818402190,"tok123"])', 200);
+      }
+      if (r.url.host == 'music.163.com') {
+        requests?.add(r);
+        return json(plain);
+      }
+      final copy = http.Request(r.method, r.url)
+        ..headers.addAll(r.headers)
+        ..bodyBytes = r.bodyBytes;
+      return http.Response.fromStream(await x.send(copy));
+    });
+  }
+
+  test('shareEvent goes through XEAPI with an anti-cheat token', () async {
+    final requests = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: {'MUSIC_U': 'u'},
+      client: shareClient((r) {
+        expect(r.url.toString(), 'https://interface3.music.163.com/xeapi/share/friends/resource');
+        expect(r.headers['X-antiCheatToken'], 'tok123');
+        return {'code': 200};
+      }, requests: requests),
+    );
+    await api.shareEvent('好听', type: ShareType.song, id: '5');
+    expect(requests.where((r) => r.url.host == 'music.163.com'), isEmpty);
+  });
+
+  test('shareEvent falls back to the plain API and reports the XEAPI error', () async {
+    final requests = <http.Request>[];
+    final api = NeteaseApi(
+      cookies: {'MUSIC_U': 'u'},
+      client: shareClient(
+        (r) => {'code': 400, 'message': '当前版本不支持分享歌曲'},
+        requests: requests,
+        plain: {'code': 400, 'message': '其他错误'},
+      ),
+    );
+    await expectLater(
+      api.shareEvent('hi', type: ShareType.song, id: '5'),
+      throwsA(isA<ApiException>().having((e) => e.message, 'message', '当前版本不支持分享歌曲')),
+    );
+    final plain = requests.where((r) => r.url.host == 'music.163.com').single;
+    expect(plain.bodyFields, {'type': 'song', 'msg': 'hi', 'id': '5'});
+  });
+
+  test('shareEvent succeeds when the plain API accepts it', () async {
+    final api = NeteaseApi(cookies: {'MUSIC_U': 'u'}, client: shareClient((r) => {'code': 400}));
+    await api.shareEvent('只有文字');
+  });
+
+  test('shareEvent does not retry when login is required', () async {
+    final requests = <http.Request>[];
+    final api = NeteaseApi(client: shareClient((r) => {'code': 301}, requests: requests));
+    await expectLater(api.shareEvent('hi'), throwsA(isA<ApiException>()));
+    expect(requests.where((r) => r.url.host == 'music.163.com'), isEmpty);
+  });
+
   test('non-200 codes become ApiException; 301 means login needed', () async {
     final api = NeteaseApi(client: MockClient((r) async => json({'code': 301, 'msg': '需要登录'})));
     await expectLater(

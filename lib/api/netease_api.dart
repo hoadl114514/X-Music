@@ -781,14 +781,34 @@ class NeteaseApi {
 
   /// 发动态（需要登录）。[type] 是附带资源的类型，[id] 是资源 id；纯文字动态不传。
   ///
-  /// 接口参考 api-enhanced 的 share_resource。先走明文接口，被拒（非登录问题）时换 WEAPI 再试一次。
+  /// 接口参考 api-enhanced 的 share_resource：以安卓客户端身份走 XEAPI，带易盾反作弊 token。
+  /// 网页端 / PC 身份分享歌曲会被拒（「当前版本不支持分享歌曲」）。
+  /// XEAPI 失败（非登录问题）时退回明文接口再试一次，两次都失败报 XEAPI 的错误。
   Future<void> shareEvent(String msg, {ShareType type = ShareType.none, String id = ''}) async {
     final form = {'type': type.value, 'msg': msg, 'id': id};
     try {
-      await _api('https://music.163.com/api/share/friends/resource', form);
+      final token = await antiCheatToken();
+      await _xeapi('/api/share/friends/resource', form, headers: {'X-antiCheatToken': ?token});
     } on ApiException catch (e) {
       if (e.needsLogin) rethrow;
-      await _weapi('/api/share/friends/resource', form);
+      try {
+        await _api('https://music.163.com/api/share/friends/resource', form);
+      } on ApiException {
+        throw e;
+      }
+    }
+  }
+
+  /// 易盾反作弊 token（每次取新的，不缓存）。取不到返回 null，由服务端决定是否放行。
+  Future<String?> antiCheatToken() async {
+    try {
+      final res = await _client
+          .get(Uri.parse('https://ac.dun.163yun.com/v3/b?pn=YD00000558929251'))
+          .timeout(_timeout);
+      final m = RegExp(r'\(\[(\d+),\d+,"([^"]+)"\]\)').firstMatch(utf8.decode(res.bodyBytes));
+      return m != null && m.group(1) == '200' ? m.group(2) : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -1391,7 +1411,11 @@ class NeteaseApi {
   }
 
   /// 以安卓客户端身份发一个 XEAPI 加密请求。
-  Future<Map<String, Object?>> _xeapi(String apiPath, Map<String, String> form) async {
+  Future<Map<String, Object?>> _xeapi(
+    String apiPath,
+    Map<String, String> form, {
+    Map<String, String> headers = const {},
+  }) async {
     final key = await _xeapiPublicKey();
     const appver = '9.1.65', osver = '16';
     final buildver = '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
@@ -1423,6 +1447,7 @@ class NeteaseApi {
               'x-buildver': buildver,
               'x-music-u': ?_cookies['MUSIC_U'],
               'Cookie': encodeCookie(cookie),
+              ...headers,
             },
             body: XeapiCrypto.encrypt(form, key),
           )
