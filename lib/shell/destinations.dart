@@ -27,6 +27,9 @@ enum Destination {
   /// 底部导航。
   static const tabs = [forYou, discover, follow, liked];
 
+  /// 切回来时要在后台刷新的页面。
+  static const refreshOnVisit = {liked, recent, ranking};
+
   /// 抽屉侧栏里的菜单。
   static const drawer = [forYou, newSongs, ranking, recent, updates, settings];
 }

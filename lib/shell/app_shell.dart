@@ -14,6 +14,7 @@ import '../pages/social/follow_page.dart';
 import '../state/player_controller.dart';
 import 'app_drawer.dart';
 import 'destinations.dart';
+import 'page_visit.dart';
 import 'player_bar.dart';
 import 'top_bar.dart';
 
@@ -30,6 +31,9 @@ class _AppShellState extends State<AppShell> {
 
   /// 进过的页面。切走后不销毁，回来时数据、图片和滚动位置都还在，不用重新加载。
   final _visited = <Destination>{Destination.forYou};
+
+  /// 每个页面被切回来的次数，见 [PageVisit]。
+  final _visits = <Destination, int>{};
 
   /// 最近一次所在的底部标签。从抽屉进入的页面不属于任何标签，此时保持原高亮。
   int _tab = 0;
@@ -70,8 +74,9 @@ class _AppShellState extends State<AppShell> {
   };
 
   void _go(Destination d) => setState(() {
+    // 从别的页面切回已经建过的页面：通知它刷新。
+    if (d != _current && !_visited.add(d)) _visits[d] = (_visits[d] ?? 0) + 1;
     _current = d;
-    _visited.add(d);
     final i = Destination.tabs.indexOf(d);
     if (i >= 0) _tab = i;
   });
@@ -94,7 +99,12 @@ class _AppShellState extends State<AppShell> {
                 children: [
                   for (final d in Destination.values)
                     _visited.contains(d)
-                        ? KeyedSubtree(key: ValueKey(d), child: _page(d))
+                        ? KeyedSubtree(
+                            key: ValueKey(d),
+                            child: Destination.refreshOnVisit.contains(d)
+                                ? PageVisit(count: _visits[d] ?? 0, child: _page(d))
+                                : _page(d),
+                          )
                         : const SizedBox.shrink(),
                 ],
               ),
