@@ -129,7 +129,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('drawer opens the new songs page', (tester) async {
+  testWidgets('drawer opens the new songs page and goes back home', (tester) async {
     await pumpHome(tester, const Size(400, 900));
     await tester.tap(find.byTooltip('个人中心'));
     for (var i = 0; i < 5; i++) {
@@ -141,6 +141,14 @@ void main() {
     }
     expect(requests, contains('/api/v1/discovery/new/songs'));
     expect(find.text('华语'), findsOneWidget);
+
+    // 抽屉最上面的「首页」回到首页。
+    await tester.tap(find.byTooltip('个人中心'));
+    await settle(tester);
+    await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('首页')));
+    await settle(tester);
+    expect(find.text('华语'), findsNothing);
+    expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

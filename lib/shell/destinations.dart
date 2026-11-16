@@ -21,9 +21,12 @@ enum Destination {
   final String shortLabel;
   final IconData icon;
 
+  /// 抽屉侧栏里显示的名字：首页叫「首页」，其余用页面标题。
+  String get drawerLabel => this == forYou ? shortLabel : label;
+
   /// 底部导航。
   static const tabs = [forYou, discover, follow, liked];
 
   /// 抽屉侧栏里的菜单。
-  static const drawer = [newSongs, ranking, recent, updates, settings];
+  static const drawer = [forYou, newSongs, ranking, recent, updates, settings];
 }
