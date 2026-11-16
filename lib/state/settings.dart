@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/client_identity.dart';
 import '../audio/audio_cache.dart';
 import '../data/models.dart';
 
@@ -24,12 +25,22 @@ class AppSettings extends ChangeNotifier {
   static const _kPlayMode = 'play_mode';
   static const _kSkippedUpdate = 'skipped_update';
   static const _kAudioCacheLimit = 'audio_cache_limit';
+  static const _kDeviceId = 'device_id';
 
   /// 搜索历史最多保留几条。
   static const searchHistoryLimit = 20;
 
   String get cookie => _prefs.getString(_kCookie) ?? '';
   set cookie(String v) => _set(() => _prefs.setString(_kCookie, v));
+
+  /// 本机的设备号，所有接口共用。第一次用到时生成并保存，之后不变。
+  String get deviceId {
+    final saved = _prefs.getString(_kDeviceId);
+    if (saved != null && saved.isNotEmpty) return saved;
+    final id = ClientProfile.newDeviceId();
+    _prefs.setString(_kDeviceId, id);
+    return id;
+  }
 
   /// 默认音质。歌曲没有这一档时自动降到它有的最高档。
   AudioQuality get preferredQuality =>

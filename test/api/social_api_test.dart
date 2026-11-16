@@ -335,7 +335,8 @@ void main() {
     final api = _api({}, seen: seen);
     await api.likeEvent('A_EV_2_1_10', true);
     await api.likeEvent('A_EV_2_1_10', false);
-    expect(seen.map((r) => r.url.path), ['/api/resource/like', '/api/resource/unlike']);
-    expect(seen.first.bodyFields['threadId'], 'A_EV_2_1_10');
+    // 和 api-enhanced 一样走网页端 WEAPI。
+    expect(seen.map((r) => r.url.path), ['/weapi/resource/like', '/weapi/resource/unlike']);
+    expect(seen.first.bodyFields.keys, containsAll(['params', 'encSecKey']));
   });
 }

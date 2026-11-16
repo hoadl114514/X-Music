@@ -244,7 +244,7 @@ void main() {
     expect(find.textContaining('2 首歌'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
-    expect(paths, contains('/api/playlist/manipulate/tracks'));
+    expect(paths, contains('/eapi/playlist/manipulate/tracks'));
     expect(find.text('歌1'), findsNothing);
     expect(find.text('歌2'), findsOneWidget);
     expect(find.text('歌3'), findsNothing);

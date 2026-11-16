@@ -5,15 +5,19 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:http/http.dart' as http;
 
 import '../data/models.dart';
+import 'client_identity.dart';
 import 'cookies.dart';
 import 'eapi_crypto.dart';
 import 'weapi_crypto.dart';
 import 'xeapi_crypto.dart';
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.code});
+  const ApiException(this.message, {this.code, this.network = false});
 
   final String message;
+
+  /// 请求没发出去或没收到响应（超时、断网）。这时服务端可能已经处理了请求。
+  final bool network;
 
   /// 接口返回的 `code`；网络层错误时为 HTTP 状态码或 null。
   final int? code;
@@ -27,28 +31,38 @@ class ApiException implements Exception {
 
 /// 网易云接口。
 ///
-/// 大部分接口走明文 `/api/`（表单 POST + Cookie），播放地址走 XEAPI，歌词和收藏走 EAPI 加密。
+/// 大部分接口走明文 `/api/`（表单 POST + Cookie），播放地址和分享到动态走 XEAPI，
+/// 歌词、收藏等走 EAPI，少数网页端才放行的走 WEAPI。各传输方式用的客户端身份见「传输」一节。
 /// 只依赖 Cookie 里的 `MUSIC_U` 识别账号；没有 Cookie 时仍可搜索、播放免费歌曲。
 class NeteaseApi {
-  NeteaseApi({http.Client? client, Map<String, String> cookies = const {}, Random? random})
-    : _client = client ?? http.Client(),
-      _cookies = Map.of(cookies),
-      _random = random ?? Random();
+  /// [deviceId] 是本机保存的设备号，不传时每个实例随机一个。
+  NeteaseApi({
+    http.Client? client,
+    Map<String, String> cookies = const {},
+    Random? random,
+    String? deviceId,
+  }) : _client = client ?? http.Client(),
+       _cookies = Map.of(cookies),
+       _random = random ?? Random(),
+       _deviceId = deviceId ?? ClientProfile.newDeviceId(random);
 
-  static const _userAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/122.0 Safari/537.36 NeteaseMusicDesktop/3.0';
   static const _timeout = Duration(seconds: 15);
-
-  /// 和 PC 客户端一致的默认设备字段，用户 Cookie 里的同名字段优先。
-  static const _deviceCookies = {'os': 'pc', 'appver': '', 'osver': '', 'deviceId': 'pyncm!'};
 
   final http.Client _client;
   final Random _random;
+  final String _deviceId;
   Map<String, String> _cookies;
 
   Map<String, String> get cookies => Map.unmodifiable(_cookies);
-  set cookies(Map<String, String> value) => _cookies = Map.of(value);
+  set cookies(Map<String, String> value) {
+    final before = deviceId;
+    _cookies = Map.of(value);
+    // XEAPI 公钥和设备号绑定，设备号变了要重取。
+    if (deviceId != before) _xeapiKey = null;
+  }
+
+  /// 所有请求共用的设备号：用户 Cookie 里带了 `deviceId` 就用它，否则用本机保存的。
+  String get deviceId => _str(_cookies['deviceId']) ?? _deviceId;
 
   bool get hasLoginCookie => (_cookies['MUSIC_U'] ?? '').isNotEmpty;
 
@@ -89,10 +103,12 @@ class NeteaseApi {
 
   /// 查询扫码状态。800 过期、801 等待扫码、802 已扫码待确认、803 登录成功（带 Cookie）。
   Future<QrCheck> qrCheck(String key) async {
-    final res = await _post(Uri.parse('https://music.163.com/api/login/qrcode/client/login'), {
-      'key': key,
-      'type': '3',
-    }, anonymous: true);
+    final res = await _post(
+      Uri.parse('https://music.163.com/api/login/qrcode/client/login'),
+      {'key': key, 'type': '3'},
+      ClientProfile.pc,
+      anonymous: true,
+    );
     final data = _decodeJson(utf8.decode(res.bodyBytes));
     final code = _int(data['code']);
     final status = switch (code) {
@@ -329,19 +345,28 @@ class NeteaseApi {
   Future<void> removeFromPlaylist(String playlistId, List<String> songIds) =>
       _manipulateTracks('del', playlistId, songIds);
 
-  Future<void> _manipulateTracks(String op, String playlistId, List<String> songIds) =>
-      _api('https://music.163.com/api/playlist/manipulate/tracks', {
-        'op': op,
-        'pid': playlistId,
-        'trackIds': jsonEncode([for (final id in songIds) int.parse(id)]),
-        'imme': 'true',
-      });
+  /// 和 api-enhanced 的 playlist_tracks 一样先走 EAPI，不通再走明文。
+  Future<void> _manipulateTracks(String op, String playlistId, List<String> songIds) {
+    final form = {
+      'op': op,
+      'pid': playlistId,
+      'trackIds': jsonEncode([for (final id in songIds) int.parse(id)]),
+      'imme': 'true',
+    };
+    return _withFallback(
+      () => _eapi('/api/playlist/manipulate/tracks', form),
+      () => _api('https://music.163.com/api/playlist/manipulate/tracks', form),
+    );
+  }
 
-  /// 收藏 / 取消收藏别人的歌单。
-  Future<void> setPlaylistSubscribed(String playlistId, bool subscribed) => _api(
-    'https://music.163.com/api/playlist/${subscribed ? 'subscribe' : 'unsubscribe'}',
-    {'id': playlistId},
-  );
+  /// 收藏 / 取消收藏别人的歌单。和 api-enhanced 的 playlist_subscribe 一样先走 EAPI。
+  Future<void> setPlaylistSubscribed(String playlistId, bool subscribed) {
+    final path = '/api/playlist/${subscribed ? 'subscribe' : 'unsubscribe'}';
+    return _withFallback(
+      () => _eapi(path, {'id': playlistId}),
+      () => _api('https://music.163.com$path', {'id': playlistId}),
+    );
+  }
 
   // ---------------------------------------------------------------- 歌单管理
   //
@@ -433,10 +458,12 @@ class NeteaseApi {
     return [for (final s in _list(data['data'])) ?parseSong(s)];
   }
 
-  /// 私人 FM 里标记「不喜欢」。
-  Future<void> fmTrash(String songId) => _api(
-    'https://music.163.com/api/radio/trash/add?alg=RT&songId=$songId&time=25',
-    {'songId': songId},
+  /// 私人 FM 里标记「不喜欢」。和 api-enhanced 的 fm_trash 一样先走 WEAPI，不通再走明文。
+  Future<void> fmTrash(String songId) => _withFallback(
+    () => _weapi('/api/radio/trash/add?alg=RT&songId=$songId&time=25', {'songId': songId}),
+    () => _api('https://music.163.com/api/radio/trash/add?alg=RT&songId=$songId&time=25', {
+      'songId': songId,
+    }),
   );
 
   /// 推荐歌单。登录后是每日推荐歌单，未登录是通用推荐。
@@ -530,11 +557,8 @@ class NeteaseApi {
       ]),
     },
     host: 'https://clientlog.music.163.com',
-    device: _logDevice,
+    profile: ClientProfile.osx,
   );
-
-  /// 上报日志时用的客户端身份（macOS 客户端）。
-  static const _logDevice = {'os': 'osx', 'appver': '3.1.10.5100', 'osver': '15.5'};
 
   // ---------------------------------------------------------------- 评论
 
@@ -587,26 +611,33 @@ class NeteaseApi {
     );
   }
 
-  /// 给评论点赞 / 取消点赞（需要登录）。
-  Future<void> likeComment(String threadId, int commentId, bool like) => _api(
-    'https://music.163.com/api/v1/comment/${like ? 'like' : 'unlike'}',
-    {'threadId': threadId, 'commentId': '$commentId'},
-  );
+  /// 给评论点赞 / 取消点赞（需要登录）。和 api-enhanced 的 comment_like 一样先走 WEAPI。
+  Future<void> likeComment(String threadId, int commentId, bool like) {
+    final path = '/api/v1/comment/${like ? 'like' : 'unlike'}';
+    final form = {'threadId': threadId, 'commentId': '$commentId'};
+    return _withFallback(() => _weapi(path, form), () => _api('https://music.163.com$path', form));
+  }
 
   /// 发评论；[replyTo] 不为 null 时是回复那条评论。返回新评论（接口没给时为 null）。
+  ///
+  /// 和 api-enhanced 的 comment 一样先走 EAPI，不通再走明文。
+  /// api-enhanced 还带了易盾 v2 token（要跑网页版 SDK），这里没带。
   Future<Comment?> postComment(String threadId, String content, {int? replyTo}) async {
-    final data = await _api(
-      'https://music.163.com/api/resource/comments/${replyTo == null ? 'add' : 'reply'}',
-      {'threadId': threadId, 'content': content, 'commentId': ?replyTo?.toString()},
+    final path = '/api/resource/comments/${replyTo == null ? 'add' : 'reply'}';
+    final form = {'threadId': threadId, 'content': content, 'commentId': ?replyTo?.toString()};
+    final data = await _withFallback(
+      () => _eapi(path, form),
+      () => _api('https://music.163.com$path', form),
     );
     return parseComment(data['comment']);
   }
 
-  /// 删除自己的评论。
-  Future<void> deleteComment(String threadId, int commentId) => _api(
-    'https://music.163.com/api/resource/comments/delete',
-    {'threadId': threadId, 'commentId': '$commentId'},
-  );
+  /// 删除自己的评论。先走 EAPI，不通再走明文。
+  Future<void> deleteComment(String threadId, int commentId) {
+    const path = '/api/resource/comments/delete';
+    final form = {'threadId': threadId, 'commentId': '$commentId'};
+    return _withFallback(() => _eapi(path, form), () => _api('https://music.163.com$path', form));
+  }
 
   // ---------------------------------------------------------------- 用户
 
@@ -769,34 +800,32 @@ class NeteaseApi {
     return _eventPage(data);
   }
 
-  /// 给动态点赞 / 取消点赞（需要登录）。
-  Future<void> likeEvent(String threadId, bool like) => _api(
-    'https://music.163.com/api/resource/${like ? 'like' : 'unlike'}',
-    {'threadId': threadId},
-  );
+  /// 给动态点赞 / 取消点赞（需要登录）。和 api-enhanced 的 resource_like 一样先走 WEAPI。
+  Future<void> likeEvent(String threadId, bool like) {
+    final path = '/api/resource/${like ? 'like' : 'unlike'}';
+    return _withFallback(
+      () => _weapi(path, {'threadId': threadId}),
+      () => _api('https://music.163.com$path', {'threadId': threadId}),
+    );
+  }
 
-  /// 删除自己的动态。
-  Future<void> deleteEvent(int eventId) =>
-      _api('https://music.163.com/api/event/delete', {'id': '$eventId'});
+  /// 删除自己的动态。和 api-enhanced 的 event_del 一样先走 WEAPI。
+  Future<void> deleteEvent(int eventId) => _withFallback(
+    () => _weapi('/api/event/delete', {'id': '$eventId'}),
+    () => _api('https://music.163.com/api/event/delete', {'id': '$eventId'}),
+  );
 
   /// 发动态（需要登录）。[type] 是附带资源的类型，[id] 是资源 id；纯文字动态不传。
   ///
   /// 接口参考 api-enhanced 的 share_resource：以安卓客户端身份走 XEAPI，带易盾反作弊 token。
   /// 网页端 / PC 身份分享歌曲会被拒（「当前版本不支持分享歌曲」）。
   /// XEAPI 失败（非登录问题）时退回明文接口再试一次，两次都失败报 XEAPI 的错误。
-  Future<void> shareEvent(String msg, {ShareType type = ShareType.none, String id = ''}) async {
+  Future<void> shareEvent(String msg, {ShareType type = ShareType.none, String id = ''}) {
     final form = {'type': type.value, 'msg': msg, 'id': id};
-    try {
+    return _withFallback(() async {
       final token = await antiCheatToken();
       await _xeapi('/api/share/friends/resource', form, headers: {'X-antiCheatToken': ?token});
-    } on ApiException catch (e) {
-      if (e.needsLogin) rethrow;
-      try {
-        await _api('https://music.163.com/api/share/friends/resource', form);
-      } on ApiException {
-        throw e;
-      }
-    }
+    }, () => _api('https://music.163.com/api/share/friends/resource', form));
   }
 
   /// 易盾反作弊 token（每次取新的，不缓存）。取不到返回 null，由服务端决定是否放行。
@@ -858,13 +887,10 @@ class NeteaseApi {
       'time': '${before?.millisecondsSinceEpoch ?? 0}',
       'total': 'true',
     };
-    Map<String, Object?> data;
-    try {
-      data = await _weapi('/api/msg/private/history', form);
-    } on ApiException catch (e) {
-      if (e.needsLogin) rethrow;
-      data = await _api('https://music.163.com/api/msg/private/history', form);
-    }
+    final data = await _withFallback(
+      () => _weapi('/api/msg/private/history', form),
+      () => _api('https://music.163.com/api/msg/private/history', form),
+    );
     final messages = [for (final m in _list(data['msgs'])) ?parsePrivateMessage(m)]
       ..sort((a, b) => a.time.compareTo(b.time));
     return MessageHistory(messages: messages, more: data['more'] == true);
@@ -1293,41 +1319,60 @@ class NeteaseApi {
   }
 
   // ---------------------------------------------------------------- 传输
+  //
+  // 每种传输方式固定一种客户端身份（[ClientProfile]），UA、Cookie、EAPI 加密头三处一致：
+  // - 明文 `/api/`、EAPI：PC 客户端；
+  // - 播放日志（EAPI 发到 clientlog）：macOS 客户端；
+  // - WEAPI：网页端；
+  // - XEAPI：安卓客户端。
+  // 所有方式共用同一个设备号 [deviceId]。用户 Cookie 里的系统 / 版本字段会被身份覆盖，
+  // 免得 UA 说是 PC、Cookie 又说是安卓。
 
-  Map<String, String> _headers({bool anonymous = false, Map<String, String> device = const {}}) => {
-    'User-Agent': device['os'] == 'osx' ? _macUserAgent : _userAgent,
-    'Referer': 'https://music.163.com/',
-    'Cookie': encodeCookie({..._deviceCookies, if (!anonymous) ..._cookies, ...device}),
+  /// 某种身份下的 Cookie：用户 Cookie（去掉身份字段）+ 身份字段。
+  Map<String, String> _cookieFor(ClientProfile profile, {bool anonymous = false}) => {
+    if (!anonymous)
+      for (final e in _cookies.entries)
+        if (!ClientProfile.keys.contains(e.key)) e.key: e.value,
+    ...profile.fields(deviceId),
   };
 
-  static const _macUserAgent =
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  Map<String, String> _headers(ClientProfile profile, {bool anonymous = false}) => {
+    'User-Agent': profile.userAgent,
+    'Referer': 'https://music.163.com/',
+    'Cookie': encodeCookie(_cookieFor(profile, anonymous: anonymous)),
+  };
 
+  /// 秒级时间戳，EAPI / XEAPI 的 `buildver`。
+  static String _buildver() => '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+
+  /// 以 PC 客户端身份发一个明文 `/api/` 请求。
   Future<Map<String, Object?>> _api(
     String url,
     Map<String, String> form, {
     bool anonymous = false,
   }) async {
-    final res = await _post(Uri.parse(url), form, anonymous: anonymous);
+    final res = await _post(Uri.parse(url), form, ClientProfile.pc, anonymous: anonymous);
     return _check(_decodeJson(utf8.decode(res.bodyBytes)));
   }
 
+  /// 发一个 EAPI 加密请求，默认 PC 客户端身份。
+  ///
+  /// 加密头和 api-enhanced 一致：设备字段 + `requestId`，登录态（`MUSIC_U` / `__csrf`）也放进去。
   Future<Map<String, Object?>> _eapi(
     String apiPath,
     Map<String, Object?> params, {
     String host = 'https://interface3.music.163.com',
     bool encryptedResponse = false,
-    Map<String, String> device = const {},
+    ClientProfile profile = ClientProfile.pc,
   }) async {
     final header = {
-      ..._deviceCookies,
-      'deviceId': _cookies['deviceId'] ?? _deviceCookies['deviceId']!,
-      ...device,
+      ...profile.fields(deviceId),
+      'versioncode': '140',
+      'buildver': _buildver(),
+      'resolution': '1920x1080',
       'requestId': '${20000000 + _random.nextInt(10000000)}',
-      // 登录态也放进加密头里，日志类接口按这里识别账号。
-      if (_cookies['MUSIC_U'] case final u? when device.isNotEmpty) 'MUSIC_U': u,
-      if (_cookies['__csrf'] case final c? when device.isNotEmpty) '__csrf': c,
+      'MUSIC_U': ?_str(_cookies['MUSIC_U']),
+      '__csrf': ?_str(_cookies['__csrf']),
     };
     final payload = jsonEncode({
       ...params,
@@ -1335,7 +1380,7 @@ class NeteaseApi {
       'header': jsonEncode(header),
     });
     final url = Uri.parse('$host${apiPath.replaceFirst('/api/', '/eapi/')}');
-    final res = await _post(url, {'params': EapiCrypto.encrypt(apiPath, payload)}, device: device);
+    final res = await _post(url, {'params': EapiCrypto.encrypt(apiPath, payload)}, profile);
     final String body;
     try {
       body = encryptedResponse ? EapiCrypto.decrypt(res.bodyBytes) : utf8.decode(res.bodyBytes);
@@ -1351,24 +1396,35 @@ class NeteaseApi {
     final res = await _post(
       Uri.parse('https://music.163.com${apiPath.replaceFirst('/api/', '/weapi/')}'),
       WeapiCrypto.encrypt(body, random: _random),
-      userAgent: _webUserAgent,
+      ClientProfile.web,
     );
     return _check(_decodeJson(utf8.decode(res.bodyBytes)));
   }
 
-  static const _webUserAgent =
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0';
+  /// 先试 [primary]，服务端报错时用 [fallback] 再试；两次都失败报 [primary] 的错误。
+  ///
+  /// 用于和 api-enhanced 对齐传输方式的写操作：新方式不通时退回原来能用的方式。
+  /// 登录失效和网络错误不重试：前者重试没用，后者服务端可能已经处理过，重试会重复操作。
+  static Future<T> _withFallback<T>(
+    Future<T> Function() primary,
+    Future<T> Function() fallback,
+  ) async {
+    try {
+      return await primary();
+    } on ApiException catch (e) {
+      if (e.needsLogin || e.network) rethrow;
+      try {
+        return await fallback();
+      } on ApiException {
+        throw e;
+      }
+    }
+  }
 
   // ---------------------------------------------------------------- XEAPI
 
-  /// XEAPI 用的设备号（每次启动随机一个）和服务端公钥（首次用到时取，失效时重取）。
-  late final String _xeapiDeviceId = XeapiCrypto.newDeviceId(_random);
+  /// XEAPI 的服务端公钥（首次用到时取，失效或设备号变化时重取）。
   Future<XeapiPublicKey>? _xeapiKey;
-
-  static const _androidUserAgent =
-      'NeteaseMusic/9.5.61.260802021928(9005061);Dalvik/2.1.0 '
-      '(Linux; U; Android 12; HBN-AL00 Build/cd737a2.0)';
 
   Future<XeapiPublicKey> _xeapiPublicKey() => _xeapiKey ??= _fetchXeapiKey().then(
     (k) => k,
@@ -1386,16 +1442,15 @@ class NeteaseApi {
       res = await _client
           .post(
             Uri.parse('https://interface.music.163.com/api/bsr/sk/get'),
-            headers: {'User-Agent': _androidUserAgent, 'Cookie': 'deviceId=$_xeapiDeviceId'},
-            body: XeapiCrypto.registerForm(
-              deviceId: _xeapiDeviceId,
-              nonce: nonce,
-              timestamp: timestamp,
-            ),
+            headers: {
+              'User-Agent': ClientProfile.android.userAgent,
+              'Cookie': encodeCookie({'deviceId': deviceId}),
+            },
+            body: XeapiCrypto.registerForm(deviceId: deviceId, nonce: nonce, timestamp: timestamp),
           )
           .timeout(_timeout);
     } catch (e) {
-      throw ApiException('网络请求失败：$e');
+      throw ApiException('网络请求失败：$e', network: true);
     }
     final data = _check(_decodeJson(utf8.decode(res.bodyBytes)))['data'];
     if (data is! Map ||
@@ -1417,17 +1472,9 @@ class NeteaseApi {
     Map<String, String> headers = const {},
   }) async {
     final key = await _xeapiPublicKey();
-    const appver = '9.1.65', osver = '16';
-    final buildver = '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-    final cookie = {
-      ..._cookies,
-      'os': 'android',
-      'osver': osver,
-      'appver': appver,
-      'buildver': buildver,
-      'deviceId': _xeapiDeviceId,
-      'sDeviceId': _xeapiDeviceId,
-    };
+    const profile = ClientProfile.android;
+    final buildver = _buildver();
+    final cookie = {..._cookieFor(profile), 'buildver': buildver, 'sDeviceId': deviceId};
     final http.Response res;
     try {
       res = await _client
@@ -1436,24 +1483,24 @@ class NeteaseApi {
               'https://interface3.music.163.com${apiPath.replaceFirst('/api/', '/xeapi/')}',
             ),
             headers: {
-              'User-Agent': _androidUserAgent,
+              'User-Agent': profile.userAgent,
               'X-Client-Enc-State': 'ENCRYPTED',
               'x-aeapi': 'true',
-              'x-deviceid': _xeapiDeviceId,
-              'x-sdeviceid': _xeapiDeviceId,
-              'x-os': 'android',
-              'x-osver': osver,
-              'x-appver': appver,
+              'x-deviceid': deviceId,
+              'x-sdeviceid': deviceId,
+              'x-os': profile.os,
+              'x-osver': profile.osver,
+              'x-appver': profile.appver,
               'x-buildver': buildver,
-              'x-music-u': ?_cookies['MUSIC_U'],
+              'x-music-u': ?_str(_cookies['MUSIC_U']),
               'Cookie': encodeCookie(cookie),
               ...headers,
             },
-            body: XeapiCrypto.encrypt(form, key),
+            body: XeapiCrypto.encrypt(form, key, os: profile.os),
           )
           .timeout(_timeout);
     } catch (e) {
-      throw ApiException('网络请求失败：$e');
+      throw ApiException('网络请求失败：$e', network: true);
     }
     if (res.statusCode != 200) throw ApiException('HTTP ${res.statusCode}', code: res.statusCode);
     final String body;
@@ -1468,27 +1515,23 @@ class NeteaseApi {
 
   Future<http.Response> _post(
     Uri url,
-    Map<String, String> form, {
+    Map<String, String> form,
+    ClientProfile profile, {
     bool anonymous = false,
-    Map<String, String> device = const {},
-    String? userAgent,
   }) async {
     final http.Response res;
     try {
       res = await _client
           .post(
             url,
-            headers: {
-              ..._headers(anonymous: anonymous, device: device),
-              'User-Agent': ?userAgent,
-            },
+            headers: _headers(profile, anonymous: anonymous),
             body: form,
           )
           .timeout(_timeout);
     } on ApiException {
       rethrow;
     } catch (e) {
-      throw ApiException('网络请求失败：$e');
+      throw ApiException('网络请求失败：$e', network: true);
     }
     if (res.statusCode != 200) throw ApiException('HTTP ${res.statusCode}', code: res.statusCode);
     return res;

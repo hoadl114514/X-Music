@@ -98,13 +98,6 @@ abstract final class XeapiCrypto {
     return utf8.decode(bytes);
   }
 
-  /// 52 位十六进制设备号，和 api-enhanced 生成的格式一致。
-  static String newDeviceId([Random? random]) {
-    final rnd = random ?? Random.secure();
-    const hex = '0123456789ABCDEF';
-    return String.fromCharCodes(List.generate(52, (_) => hex.codeUnitAt(rnd.nextInt(16))));
-  }
-
   // ---------------------------------------------------------------- 内部
 
   /// 随机 16 字节逐字节异或，再整体循环左移若干字节，随机数放在最前面。

@@ -36,7 +36,7 @@ class AppServices {
       ..maximumSizeBytes = 256 << 20;
     unawaited(ImageDiskCache.prune());
     final settings = await AppSettings.load();
-    final api = NeteaseApi(cookies: parseCookie(settings.cookie));
+    final api = NeteaseApi(cookies: parseCookie(settings.cookie), deviceId: settings.deviceId);
     final lyrics = LyricService(netease: api, qq: QqLyrics());
     final audioCache = AudioCache.system(limit: () => settings.audioCacheLimit);
     unawaited(audioCache.init());
