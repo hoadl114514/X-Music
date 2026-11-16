@@ -172,6 +172,43 @@ class PlayerController extends ChangeNotifier {
   /// 当前歌曲。只在确定有歌时使用（播放页、播放条）。
   Song get song => current!;
   List<Song> get queue => _queue;
+
+  /// 随机模式下预先选好的下一首（迷你播放条滑动时要提前显示它）。
+  int? _shuffleNext;
+
+  /// 按「下一首」会放的歌；私人 FM 放到最后一首（下一批还没取到）时为 null。
+  Song? get peekNext {
+    final len = _queue.length;
+    if (len == 0 || _index < 0) return null;
+    if (_upNext case final id?) {
+      final i = _queue.indexWhere((s) => s.id == id);
+      if (i >= 0 && i != _index) return _queue[i];
+    }
+    if (isRadio && _index == len - 1) return null;
+    if (_shuffle && len > 1) return _queue[_shuffleNext ??= _pickShuffle()];
+    return _queue[(_index + 1) % len];
+  }
+
+  /// 按「上一首」（不回到开头时）会放的歌；没有上一首时为 null。
+  Song? get peekPrevious {
+    final len = _queue.length;
+    if (len <= 1 || _index < 0) return null;
+    if (_history.isNotEmpty && (_shuffle || isRadio)) {
+      final i = _history.last;
+      if (i >= 0 && i < len && i != _index) return _queue[i];
+    }
+    if (isRadio && _index == 0) return null;
+    return _queue[(_index - 1 + len) % len];
+  }
+
+  int _pickShuffle() {
+    var i = _index;
+    while (i == _index) {
+      i = _random.nextInt(_queue.length);
+    }
+    return i;
+  }
+
   int get index => _index;
 
   /// 队列来源，例如歌单名、"搜索：xxx"。
@@ -271,6 +308,7 @@ class PlayerController extends ChangeNotifier {
       ]);
     if (extend != null) _shuffle = false;
     _queue = List.unmodifiable(songs);
+    _shuffleNext = null;
     _upNext = null;
     _queueTitle = title;
     _sourceId = sourceId;
@@ -301,6 +339,7 @@ class PlayerController extends ChangeNotifier {
     if (_queue.length <= 1) return;
     _reportListened();
     _queue = List.unmodifiable([..._queue]..removeAt(i));
+    _shuffleNext = null;
     _index = -1; // 让 _load 视为换歌。
     _history.clear();
     await _load(i.clamp(0, _queue.length - 1));
@@ -363,6 +402,7 @@ class PlayerController extends ChangeNotifier {
     final i = list.indexWhere((s) => s.id == cur.id);
     list.insert(i + 1, song);
     _queue = List.unmodifiable(list);
+    _shuffleNext = null;
     _index = i;
     // 队列位置变了，旧的随机历史对不上，清掉。
     _history.clear();
@@ -513,10 +553,11 @@ class PlayerController extends ChangeNotifier {
       if (i >= 0 && i != _index) return _load(i);
     }
     if (_shuffle && _queue.length > 1) {
-      var i = _index;
-      while (i == _index) {
-        i = _random.nextInt(_queue.length);
-      }
+      // 用预先选好的那首，和迷你播放条滑动时显示的一致。
+      final planned = _shuffleNext;
+      final i = planned != null && planned != _index && planned < _queue.length
+          ? planned
+          : _pickShuffle();
       return _load(i);
     }
     return _load((_index + 1) % _queue.length);
@@ -538,6 +579,7 @@ class PlayerController extends ChangeNotifier {
     bool keepLyrics = false,
   }) async {
     final token = ++_token;
+    _shuffleNext = null;
     _retryTimer?.cancel();
     _retryTimer = null;
     _wantPlay = autoplay ?? true;

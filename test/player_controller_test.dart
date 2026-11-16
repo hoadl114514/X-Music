@@ -309,6 +309,18 @@ void main() {
     expect(engine.loaded.last, contains('/3/'));
   });
 
+  test('peekNext matches what next plays, also in shuffle', () async {
+    await player.playQueue(queue, title: '测试歌单');
+    expect(player.peekNext?.id, '2');
+    expect(player.peekPrevious?.id, '3');
+    player.toggleShuffle();
+    for (var i = 0; i < 5; i++) {
+      final peek = player.peekNext;
+      await player.next();
+      expect(player.song.id, peek?.id);
+    }
+  });
+
   test('radio prefetches the next batch before the last song and skips duplicates', () async {
     final batches = [
       [song('a'), song('b')],
