@@ -148,6 +148,13 @@ class PlayerController extends ChangeNotifier {
 
   Timer? _timer;
 
+  /// 播放中每 50ms 一次的进度推进。[notifyListeners] 不包含它，见 [ticks]。
+  final _ticks = _Ticks();
+
+  /// 播放进度每次推进时通知（约 50ms 一次）。其他状态变化走 [addListener]。
+  /// 要显示实时进度的 widget 用 [PlayerScope.ticking]。
+  Listenable get ticks => _ticks;
+
   /// 私人 FM 这类"无尽队列"：放到最后一首时调用它取下一批追加到队列。
   Future<List<Song>> Function()? _extend;
 
@@ -165,6 +172,43 @@ class PlayerController extends ChangeNotifier {
   /// 当前歌曲。只在确定有歌时使用（播放页、播放条）。
   Song get song => current!;
   List<Song> get queue => _queue;
+
+  /// 随机模式下预先选好的下一首（迷你播放条滑动时要提前显示它）。
+  int? _shuffleNext;
+
+  /// 按「下一首」会放的歌；私人 FM 放到最后一首（下一批还没取到）时为 null。
+  Song? get peekNext {
+    final len = _queue.length;
+    if (len == 0 || _index < 0) return null;
+    if (_upNext case final id?) {
+      final i = _queue.indexWhere((s) => s.id == id);
+      if (i >= 0 && i != _index) return _queue[i];
+    }
+    if (isRadio && _index == len - 1) return null;
+    if (_shuffle && len > 1) return _queue[_shuffleNext ??= _pickShuffle()];
+    return _queue[(_index + 1) % len];
+  }
+
+  /// 按「上一首」（不回到开头时）会放的歌；没有上一首时为 null。
+  Song? get peekPrevious {
+    final len = _queue.length;
+    if (len <= 1 || _index < 0) return null;
+    if (_history.isNotEmpty && (_shuffle || isRadio)) {
+      final i = _history.last;
+      if (i >= 0 && i < len && i != _index) return _queue[i];
+    }
+    if (isRadio && _index == 0) return null;
+    return _queue[(_index - 1 + len) % len];
+  }
+
+  int _pickShuffle() {
+    var i = _index;
+    while (i == _index) {
+      i = _random.nextInt(_queue.length);
+    }
+    return i;
+  }
+
   int get index => _index;
 
   /// 队列来源，例如歌单名、"搜索：xxx"。
@@ -239,13 +283,32 @@ class PlayerController extends ChangeNotifier {
   // ---------------------------------------------------------------- 队列
 
   /// 替换队列并从 [start] 开始播放。[sourceId] 是来源歌单 / 专辑的 id。
-  Future<void> playQueue(List<Song> songs, {int start = 0, String title = '', String? sourceId}) {
+  Future<void> playQueue(List<Song> songs, {int start = 0, String title = '', String? sourceId}) =>
+      _replaceQueue(songs, start: start, title: title, sourceId: sourceId);
+
+  /// 换队列。[extend] 不为 null 时是无尽队列（私人 FM）。
+  Future<void> _replaceQueue(
+    List<Song> songs, {
+    int start = 0,
+    String title = '',
+    String? sourceId,
+    Future<List<Song>> Function()? extend,
+  }) {
     if (songs.isEmpty) return Future.value();
     _reportListened();
     // 私人 FM 期间关掉了随机，换回普通队列时恢复上次选的模式。
-    if (isRadio) _applyMode(_savedMode);
-    _extend = null;
+    if (isRadio && extend == null) _applyMode(_savedMode);
+    _extend = extend;
+    _extendFuture = null;
+    _radioSeen
+      ..clear()
+      ..addAll([
+        if (extend != null)
+          for (final s in songs) s.id,
+      ]);
+    if (extend != null) _shuffle = false;
     _queue = List.unmodifiable(songs);
+    _shuffleNext = null;
     _upNext = null;
     _queueTitle = title;
     _sourceId = sourceId;
@@ -263,10 +326,9 @@ class PlayerController extends ChangeNotifier {
       _notices.add('$title 暂时没有可播放的歌曲');
       return;
     }
-    await playQueue(first, title: title);
-    _extend = fetch;
-    _shuffle = false;
-    notifyListeners();
+    // 先标成无尽队列再开始放：第一首加载失败自动跳下一首时，也要按私人 FM 的规则走，
+    // 不能当成普通队列绕回第一首。
+    await _replaceQueue(first, title: title, extend: fetch);
   }
 
   /// 从队列里去掉当前这首并跳到下一首（私人 FM 的「不喜欢」）。
@@ -277,6 +339,7 @@ class PlayerController extends ChangeNotifier {
     if (_queue.length <= 1) return;
     _reportListened();
     _queue = List.unmodifiable([..._queue]..removeAt(i));
+    _shuffleNext = null;
     _index = -1; // 让 _load 视为换歌。
     _history.clear();
     await _load(i.clamp(0, _queue.length - 1));
@@ -289,23 +352,42 @@ class PlayerController extends ChangeNotifier {
 
   Future<void>? _extendFuture;
 
+  /// 这次私人 FM 里出现过的歌（含已经「不喜欢」移出队列的），取下一批时去重用。
+  final _radioSeen = <String>{};
+
+  /// 取下一批的最多尝试次数。私人 FM 常常返回已经放过的歌，去重后为空时再取一次；网络失败也重试。
+  static const _extendAttempts = 3;
+
   Future<void> _doExtend() async {
     final fetch = _extend;
     if (fetch == null) return;
-    try {
-      final known = {for (final s in _queue) s.id};
-      final more = [
-        for (final s in await fetch())
-          if (!known.contains(s.id)) s,
-      ];
-      if (more.isNotEmpty && identical(fetch, _extend)) {
-        _queue = List.unmodifiable([..._queue, ...more]);
-        notifyListeners();
+    Object? error;
+    for (var attempt = 0; attempt < _extendAttempts; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(extendRetryDelay * attempt);
+      if (!identical(fetch, _extend)) return;
+      try {
+        final batch = await fetch();
+        if (!identical(fetch, _extend)) return;
+        final more = [
+          for (final s in batch)
+            if (_radioSeen.add(s.id)) s,
+        ];
+        if (more.isNotEmpty) {
+          _queue = List.unmodifiable([..._queue, ...more]);
+          notifyListeners();
+          return;
+        }
+        error = null;
+      } catch (e) {
+        error = e;
       }
-    } catch (e) {
-      _notices.add('获取更多歌曲失败：$e');
     }
+    if (error != null) _notices.add('获取更多歌曲失败：$error');
   }
+
+  /// 取下一批失败或全是重复时，重试前等多久（第 n 次重试等 n 倍）。测试里可以调短。
+  @visibleForTesting
+  static Duration extendRetryDelay = const Duration(milliseconds: 800);
 
   /// 下一首播放：把 [song] 放到当前这首后面（队列里已有就挪过去）。随机模式下也先放它。
   /// 队列为空时直接播放。
@@ -320,6 +402,7 @@ class PlayerController extends ChangeNotifier {
     final i = list.indexWhere((s) => s.id == cur.id);
     list.insert(i + 1, song);
     _queue = List.unmodifiable(list);
+    _shuffleNext = null;
     _index = i;
     // 队列位置变了，旧的随机历史对不上，清掉。
     _history.clear();
@@ -470,10 +553,11 @@ class PlayerController extends ChangeNotifier {
       if (i >= 0 && i != _index) return _load(i);
     }
     if (_shuffle && _queue.length > 1) {
-      var i = _index;
-      while (i == _index) {
-        i = _random.nextInt(_queue.length);
-      }
+      // 用预先选好的那首，和迷你播放条滑动时显示的一致。
+      final planned = _shuffleNext;
+      final i = planned != null && planned != _index && planned < _queue.length
+          ? planned
+          : _pickShuffle();
       return _load(i);
     }
     return _load((_index + 1) % _queue.length);
@@ -495,6 +579,7 @@ class PlayerController extends ChangeNotifier {
     bool keepLyrics = false,
   }) async {
     final token = ++_token;
+    _shuffleNext = null;
     _retryTimer?.cancel();
     _retryTimer = null;
     _wantPlay = autoplay ?? true;
@@ -505,6 +590,8 @@ class PlayerController extends ChangeNotifier {
       _errorRetries = 0;
     }
     _index = index;
+    // 私人 FM 放到倒数第二首就提前取下一批，切到最后一首之后不用等网络。
+    if (isRadio && index >= _queue.length - 2) unawaited(_extendQueue());
     _ready = false;
     final song = this.song;
     _position = startAt;
@@ -829,7 +916,8 @@ class PlayerController extends ChangeNotifier {
       final step = p - _position;
       if (step > Duration.zero && step < const Duration(seconds: 2)) _listened += step;
       _position = p;
-      notifyListeners();
+      // 只通知关心进度的（进度条、歌词）；普通监听者不跟着每 50ms 重建，列表滚动才不卡。
+      _ticks.fire();
     });
   }
 
@@ -841,6 +929,7 @@ class PlayerController extends ChangeNotifier {
   @override
   void dispose() {
     _stopTicker();
+    _ticks.dispose();
     _retryTimer?.cancel();
     _sleepTimer?.cancel();
     for (final s in _subs) {
@@ -852,7 +941,12 @@ class PlayerController extends ChangeNotifier {
   }
 }
 
-/// 把 [PlayerController] 挂到树上；依赖它的 widget 会在进度变化时重建。
+class _Ticks extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
+
+/// 把 [PlayerController] 挂到树上；依赖它的 widget 在播放状态变化（切歌、播放 / 暂停……）时重建，
+/// 播放进度推进时不重建。要跟着进度走的用 [PlayerScope.ticking]。
 class PlayerScope extends InheritedNotifier<PlayerController> {
   const PlayerScope({super.key, required PlayerController controller, required super.child})
     : super(notifier: controller);
@@ -860,7 +954,19 @@ class PlayerScope extends InheritedNotifier<PlayerController> {
   static PlayerController of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlayerScope>()!.notifier!;
 
+  /// 同 [of]，另外在播放进度推进时（约 50ms 一次）也重建。只给进度条、歌词这类用。
+  static PlayerController ticking(BuildContext context) {
+    context.dependOnInheritedWidgetOfExactType<PlayerTickScope>();
+    return of(context);
+  }
+
   /// 只取引用、不订阅变化，用于按钮回调。
   static PlayerController read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<PlayerScope>()!.notifier!;
+}
+
+/// 播放进度的通知，放在 [PlayerScope] 下面，见 [PlayerScope.ticking]。
+class PlayerTickScope extends InheritedNotifier<Listenable> {
+  PlayerTickScope({super.key, required PlayerController controller, required super.child})
+    : super(notifier: controller.ticks);
 }

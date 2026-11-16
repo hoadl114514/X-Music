@@ -154,7 +154,7 @@ class _MenuItem extends StatelessWidget {
             const SizedBox(width: 8),
             Icon(destination.icon, size: 28, color: AppColors.textPrimary),
             const SizedBox(width: 18),
-            Text(destination.label, style: const TextStyle(fontSize: 17)),
+            Text(destination.drawerLabel, style: const TextStyle(fontSize: 17)),
           ],
         ),
       ),

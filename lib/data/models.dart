@@ -1,6 +1,37 @@
 import 'package:flutter/painting.dart';
 
 /// 歌曲。[palette] 是封面图加载出来之前的占位色，也是取不到封面主色时播放页背景的兜底。
+/// 官方首页里取到的推荐：「根据你喜爱的歌曲推荐」和「雷达歌单」两个板块。
+class HomeFeed {
+  const HomeFeed({
+    required this.songTitle,
+    required this.songs,
+    this.radarTitle = '雷达歌单',
+    this.radar = const [],
+  });
+
+  /// 歌曲推荐板块的官方标题，例如「根据你喜爱的歌曲推荐」。
+  final String songTitle;
+  final List<SongRcmd> songs;
+
+  /// 雷达歌单板块的官方标题，例如「某某的雷达歌单」。
+  final String radarTitle;
+  final List<Playlist> radar;
+}
+
+/// 推荐里的一首歌和它的标签。
+class SongRcmd {
+  const SongRcmd({required this.song, this.tag, this.quality});
+
+  final Song song;
+
+  /// 推荐理由标签，例如「单曲循环的日语歌」「昨日上万播放」。
+  final String? tag;
+
+  /// 最高音质的角标：SQ（无损）或 Hi-Res。
+  final String? quality;
+}
+
 class Song {
   const Song({
     required this.id,

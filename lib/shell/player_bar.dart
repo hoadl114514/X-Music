@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../pages/now_playing/now_playing_page.dart';
 import '../state/player_controller.dart';
+import '../data/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/backdrop_color.dart';
 import '../widgets/cover_art.dart';
@@ -11,7 +14,7 @@ import '../widgets/round_icon_button.dart';
 
 /// 底部迷你播放条，参考 Spotify：悬浮圆角卡片，底色取自封面，底边是一条细进度线。
 ///
-/// 点歌曲信息进入播放页。在歌曲信息上左滑切上一首，右滑切下一首。
+/// 点歌曲信息进入播放页。在歌曲信息上左滑切下一首，右滑切上一首，滑动时旁边露出那首歌。
 /// 队列为空时不显示。
 class PlayerBar extends StatelessWidget {
   const PlayerBar({super.key});
@@ -45,56 +48,12 @@ class PlayerBar extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _SwipeToSkip(
-                      onPrevious: player.previous,
+                      current: song,
+                      previous: player.peekPrevious,
+                      next: player.peekNext,
+                      onPrevious: () => player.previous(restart: false),
                       onNext: player.next,
-                      child: InkWell(
-                        onTap: () => openNowPlaying(context),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Row(
-                          children: [
-                            SizedBox.square(
-                              dimension: 40,
-                              child: Hero(
-                                tag: 'now-playing-cover',
-                                child: CoverArt(
-                                  palette: song.palette,
-                                  seed: song.id,
-                                  imageUrl: song.coverUrl,
-                                  radius: 4,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    song.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 1),
-                                  Text(
-                                    song.artist,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: Colors.white.withValues(alpha: 0.7),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      onTap: () => openNowPlaying(context),
                     ),
                   ),
                   RoundIconButton(
@@ -117,12 +76,7 @@ class PlayerBar extends StatelessWidget {
                 ],
               ),
             ),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 0,
-              child: _ProgressLine(fraction: player.progress),
-            ),
+            const Positioned(left: 8, right: 8, bottom: 0, child: _ProgressLine()),
           ],
         ),
       ),
@@ -178,13 +132,13 @@ class FloatingBottomBar extends StatelessWidget {
 double floatingBarsInset(BuildContext context) => MediaQuery.paddingOf(context).bottom;
 
 /// 卡片底边的细进度线，只显示不响应手势（拖动进度到播放页里操作）。
+/// 迷你播放条底部的进度线。自己订阅进度，播放时只重建这一小块。
 class _ProgressLine extends StatelessWidget {
-  const _ProgressLine({required this.fraction});
-
-  final double fraction;
+  const _ProgressLine();
 
   @override
   Widget build(BuildContext context) {
+    final fraction = PlayerScope.ticking(context).progress;
     return ClipRRect(
       borderRadius: BorderRadius.circular(1),
       child: SizedBox(
@@ -205,71 +159,217 @@ class _ProgressLine extends StatelessWidget {
   }
 }
 
-/// 水平滑动切歌：内容跟手移动，松手时滑够距离或速度够快就切歌，然后回弹。
-///
-/// 左滑（手指向左）切上一首，右滑（手指向右）切下一首。
-class _SwipeToSkip extends StatefulWidget {
-  const _SwipeToSkip({required this.onPrevious, required this.onNext, required this.child});
+/// 迷你播放条里的一首歌：封面 + 歌名 + 歌手。[hero] 只给当前这首，和播放页的封面衔接。
+class _SongInfo extends StatelessWidget {
+  const _SongInfo({required this.song, this.hero = false});
 
+  final Song song;
+  final bool hero;
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = CoverArt(
+      palette: song.palette,
+      seed: song.id,
+      imageUrl: song.coverUrl,
+      radius: 4,
+    );
+    return Row(
+      children: [
+        SizedBox.square(
+          dimension: 40,
+          child: hero ? Hero(tag: 'now-playing-cover', child: cover) : cover,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                song.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                song.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.7)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 水平滑动切歌，和主流播放器一致：左滑（手指向左）切下一首，右滑切上一首。
+///
+/// 当前这首跟手移动，旁边露出上一首 / 下一首的信息；松手时滑够距离或速度够快，
+/// 就滑到底再切歌，否则回弹。没有上一首 / 下一首时拉起来有阻尼，也不会切。
+class _SwipeToSkip extends StatefulWidget {
+  const _SwipeToSkip({
+    required this.current,
+    required this.previous,
+    required this.next,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onTap,
+  });
+
+  final Song current;
+  final Song? previous;
+  final Song? next;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
-  final Widget child;
+  final VoidCallback onTap;
 
   @override
   State<_SwipeToSkip> createState() => _SwipeToSkipState();
 }
 
 class _SwipeToSkipState extends State<_SwipeToSkip> with SingleTickerProviderStateMixin {
-  /// 触发切歌的最小滑动距离（逻辑像素）。
-  static const _distance = 56.0;
+  /// 触发切歌的最小滑动比例（相对宽度）。
+  static const _fraction = 0.3;
 
   /// 触发切歌的最小甩动速度（逻辑像素/秒）。
   static const _velocity = 600.0;
 
+  /// 两首歌之间的间隔。
+  static const _gap = 24.0;
+
   late final _offset = AnimationController.unbounded(vsync: this);
+  double _width = 0;
+
+  /// 已经滑出去、等新歌顶上来的方向（-1 下一首，1 上一首）。
+  int _committed = 0;
+
+  /// 切歌没生效时把卡片滑回来的计时器。
+  Timer? _fallback;
+
+  @override
+  void didUpdateWidget(_SwipeToSkip old) {
+    super.didUpdateWidget(old);
+    // 歌换好了：新的当前歌就是刚才露出来的那首，直接归位，看起来是连续的。
+    if (old.current.id != widget.current.id) {
+      _fallback?.cancel();
+      _committed = 0;
+      _offset.value = 0;
+    }
+  }
 
   @override
   void dispose() {
+    _fallback?.cancel();
     _offset.dispose();
     super.dispose();
   }
 
-  void _onEnd(DragEndDetails d) {
+  /// 没有可切的歌时，拉动有阻尼（只走三分之一）。
+  void _onUpdate(DragUpdateDetails d) {
+    if (_committed != 0) return;
+    final delta = d.primaryDelta ?? 0;
+    final dx = _offset.value + delta;
+    final blocked =
+        (dx < 0 && widget.next == null && !_canFetchNext) || (dx > 0 && widget.previous == null);
+    _offset.value = _offset.value + (blocked ? delta / 3 : delta);
+  }
+
+  /// 私人 FM 放到最后一首时下一首还没取到（next 为 null），但按下一首会去取，照样让切。
+  bool get _canFetchNext => PlayerScope.read(context).isRadio;
+
+  Future<void> _onEnd(DragEndDetails d) async {
+    if (_committed != 0) return;
     final dx = _offset.value;
     final v = d.primaryVelocity ?? 0;
-    if (dx <= -_distance || v <= -_velocity) {
-      HapticFeedback.selectionClick();
-      widget.onPrevious();
-    } else if (dx >= _distance || v >= _velocity) {
-      HapticFeedback.selectionClick();
+    final span = _width + _gap;
+    final toNext = (dx <= -_width * _fraction || v <= -_velocity) && dx < 0;
+    final toPrevious = (dx >= _width * _fraction || v >= _velocity) && dx > 0;
+    if (toNext && (widget.next != null || _canFetchNext)) {
+      _committed = -1;
+      unawaited(HapticFeedback.selectionClick());
+      await _offset.animateTo(
+        -span,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
       widget.onNext();
+    } else if (toPrevious && widget.previous != null) {
+      _committed = 1;
+      unawaited(HapticFeedback.selectionClick());
+      await _offset.animateTo(
+        span,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+      widget.onPrevious();
+    } else {
+      _settle();
+      return;
     }
-    _offset.animateTo(0, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
+    // 切歌没生效（例如私人 FM 没取到新歌）：过一会儿还在原来那首就滑回来。
+    final from = widget.current.id;
+    _fallback?.cancel();
+    _fallback = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && _committed != 0 && widget.current.id == from) {
+        _committed = 0;
+        _settle();
+      }
+    });
   }
+
+  void _settle() =>
+      _offset.animateTo(0, duration: const Duration(milliseconds: 220), curve: Curves.easeOutCubic);
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
-      builder: (context, c) => GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragStart: (_) => _offset.stop(),
-        onHorizontalDragUpdate: (d) => _offset.value += d.primaryDelta ?? 0,
-        onHorizontalDragEnd: _onEnd,
-        onHorizontalDragCancel: () =>
-            _offset.animateTo(0, duration: const Duration(milliseconds: 220)),
-        child: AnimatedBuilder(
-          animation: _offset,
-          child: widget.child,
-          builder: (context, child) {
-            final dx = _offset.value;
-            final fade = (1 - dx.abs() / c.maxWidth).clamp(0.3, 1.0);
-            return Opacity(
-              opacity: fade,
-              child: Transform.translate(offset: Offset(dx, 0), child: child),
-            );
+      builder: (context, c) {
+        _width = c.maxWidth;
+        final span = _width + _gap;
+        Widget panel(Song song, double shift, {bool hero = false}) => Positioned(
+          left: shift,
+          width: _width,
+          top: 0,
+          bottom: 0,
+          child: _SongInfo(song: song, hero: hero),
+        );
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: widget.onTap,
+          onHorizontalDragStart: (_) {
+            if (_committed == 0) _offset.stop();
           },
-        ),
-      ),
+          onHorizontalDragUpdate: _onUpdate,
+          onHorizontalDragEnd: _onEnd,
+          onHorizontalDragCancel: () {
+            if (_committed == 0) _settle();
+          },
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _offset,
+              builder: (context, _) {
+                final dx = _offset.value;
+                final prev = widget.previous;
+                final next = widget.next;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 只在露出来时才建旁边那首，平时不多画。
+                    if (dx > 0 && prev != null) panel(prev, dx - span),
+                    panel(widget.current, dx, hero: true),
+                    if (dx < 0 && next != null) panel(next, dx + span),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

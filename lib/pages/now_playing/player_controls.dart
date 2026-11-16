@@ -16,7 +16,7 @@ class _SeekBarState extends State<SeekBar> {
 
   @override
   Widget build(BuildContext context) {
-    final player = PlayerScope.of(context);
+    final player = PlayerScope.ticking(context);
     final total = player.duration;
     final value = _dragging ?? player.progress;
     const timeStyle = TextStyle(

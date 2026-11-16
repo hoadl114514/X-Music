@@ -38,12 +38,15 @@ class _NeteaseClientAppState extends State<NeteaseClientApp> {
         controller: s.account,
         child: PlayerScope(
           controller: s.player,
-          child: MaterialApp(
-            title: AppInfo.name,
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.dark(),
-            scaffoldMessengerKey: AppScope.messengerKey,
-            home: const AppShell(),
+          child: PlayerTickScope(
+            controller: s.player,
+            child: MaterialApp(
+              title: AppInfo.name,
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.dark(),
+              scaffoldMessengerKey: AppScope.messengerKey,
+              home: const AppShell(),
+            ),
           ),
         ),
       ),

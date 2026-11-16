@@ -18,6 +18,8 @@ import '../state/player_controller.dart';
 class SystemMediaBridge extends BaseAudioHandler with SeekHandler {
   SystemMediaBridge(this._player, [this._account]) {
     _player.addListener(_sync);
+    // 进度推进单独通知；拖动进度的跳变要靠它发现。
+    _player.ticks.addListener(_sync);
     _account?.addListener(_sync);
     _sync();
   }

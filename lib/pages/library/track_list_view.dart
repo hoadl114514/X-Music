@@ -6,6 +6,7 @@ import '../../api/netease_api.dart';
 import '../../app/app.dart';
 import '../../data/models.dart';
 import '../../state/player_controller.dart';
+import '../../shell/page_visit.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/image_viewer.dart';
@@ -73,10 +74,22 @@ class _TrackListViewState extends State<TrackListView> {
   bool _loading = true;
   StreamSubscription<List<Song>>? _sub;
 
+  /// 上一次看到的 [PageVisit] 次数。
+  int? _visit;
+
   @override
   void initState() {
     super.initState();
     _start();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 在主框架里被切回来：后台刷新，列表先保留。正在加载时不打断。
+    final visit = PageVisit.of(context);
+    if (_visit != null && visit != _visit && !_loading) _start(force: true);
+    _visit = visit;
   }
 
   @override

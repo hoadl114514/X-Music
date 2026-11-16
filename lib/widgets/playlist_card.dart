@@ -154,9 +154,24 @@ class PlaylistCard extends StatelessWidget {
 
 /// 歌单列表的一行（搜索结果、用户主页等）。
 class PlaylistTile extends StatelessWidget {
-  const PlaylistTile({super.key, required this.playlist});
+  const PlaylistTile({
+    super.key,
+    required this.playlist,
+    this.trailing,
+    this.subtitle,
+    this.onReturned,
+  });
+
+  /// 从歌单页返回时调用（音乐库用来刷新歌曲数）。
+  final VoidCallback? onReturned;
 
   final Playlist playlist;
+
+  /// 右侧的按钮（如音乐库里的「管理」）。
+  final Widget? trailing;
+
+  /// 替代默认的「N 首 · 创建者」。
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -178,14 +193,16 @@ class PlaylistTile extends StatelessWidget {
       ),
       title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        ['${p.trackCount} 首', ?p.creator].join(' · '),
+        subtitle ?? ['${p.trackCount} 首', ?p.creator].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: AppColors.textSecondary),
       ),
+      trailing: trailing,
       onTap: () =>
           Navigator.of(context)
-              .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: p))),
+              .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: p)))
+              .then((_) => onReturned?.call()),
     );
   }
 }
