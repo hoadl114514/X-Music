@@ -6,6 +6,7 @@ import '../app/app.dart';
 import '../pages/home_page.dart';
 import '../pages/library/library_page.dart';
 import '../pages/music/discover_page.dart';
+import '../pages/music/nav.dart';
 import '../pages/music/new_songs_page.dart';
 import '../pages/music/ranking_page.dart';
 import '../pages/music/recent_page.dart';
@@ -73,6 +74,13 @@ class _AppShellState extends State<AppShell> {
     Destination.updates => const MyEventsPage(),
   };
 
+  /// 抽屉里的功能（新歌速递、听歌排行……）推一个单独的页面打开，带返回键，
+  /// 安卓的返回手势回到原来的界面，而不是退出应用。「首页」回到首页标签。
+  void _select(Destination d) {
+    if (Destination.tabs.contains(d)) return _go(d);
+    SubPage.push(context, SubPage(title: d.label, body: _page(d)));
+  }
+
   void _go(Destination d) => setState(() {
     // 从别的页面切回已经建过的页面：通知它刷新。
     if (d != _current && !_visited.add(d)) _visits[d] = (_visits[d] ?? 0) + 1;
@@ -83,49 +91,56 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: AppDrawer(onSelect: _go),
-      // 抽屉打开时主界面压暗，和参考图一致。
-      drawerScrimColor: Colors.black54,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const TopBar(),
-            Expanded(
-              // 没显示的页面留在后台（动画暂停），只建进过的。
-              child: IndexedStack(
-                index: _current.index,
-                children: [
-                  for (final d in Destination.values)
-                    _visited.contains(d)
-                        ? KeyedSubtree(
-                            key: ValueKey(d),
-                            child: Destination.refreshOnVisit.contains(d)
-                                ? PageVisit(count: _visits[d] ?? 0, child: _page(d))
-                                : _page(d),
-                          )
-                        : const SizedBox.shrink(),
-                ],
+    // 不在首页标签时，返回手势先回首页，再按一次才退出。
+    return PopScope(
+      canPop: _current == Destination.forYou,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _go(Destination.forYou);
+      },
+      child: Scaffold(
+        drawer: AppDrawer(onSelect: _select),
+        // 抽屉打开时主界面压暗，和参考图一致。
+        drawerScrimColor: Colors.black54,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              const TopBar(),
+              Expanded(
+                // 没显示的页面留在后台（动画暂停），只建进过的。
+                child: IndexedStack(
+                  index: _current.index,
+                  children: [
+                    for (final d in Destination.values)
+                      _visited.contains(d)
+                          ? KeyedSubtree(
+                              key: ValueKey(d),
+                              child: Destination.refreshOnVisit.contains(d)
+                                  ? PageVisit(count: _visits[d] ?? 0, child: _page(d))
+                                  : _page(d),
+                            )
+                          : const SizedBox.shrink(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      // 内容延伸到播放条和底栏下面，两者悬浮在内容上方。
-      extendBody: true,
-      bottomNavigationBar: FloatingBottomBar(
-        navigation: NavigationBar(
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => _go(Destination.tabs[i]),
-          destinations: [
-            for (final d in Destination.tabs)
-              NavigationDestination(icon: Icon(d.icon), label: d.shortLabel),
-          ],
+        // 内容延伸到播放条和底栏下面，两者悬浮在内容上方。
+        extendBody: true,
+        bottomNavigationBar: FloatingBottomBar(
+          navigation: NavigationBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            selectedIndex: _tab,
+            onDestinationSelected: (i) => _go(Destination.tabs[i]),
+            destinations: [
+              for (final d in Destination.tabs)
+                NavigationDestination(icon: Icon(d.icon), label: d.shortLabel),
+            ],
+          ),
         ),
       ),
     );

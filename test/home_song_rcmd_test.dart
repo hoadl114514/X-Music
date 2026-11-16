@@ -159,27 +159,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('drawer opens the new songs page and goes back home', (tester) async {
+  testWidgets('drawer items open as their own page; back returns home', (tester) async {
     await pumpHome(tester, const Size(400, 900));
     await tester.tap(find.byTooltip('个人中心'));
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await settle(tester);
     await tester.tap(find.text('新歌速递'));
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 100));
-    }
+    await settle(tester);
     expect(requests, contains('/api/v1/discovery/new/songs'));
     expect(find.text('华语'), findsOneWidget);
+    // 单独的页面：标题栏有返回键。
+    expect(find.byType(BackButton), findsOneWidget);
 
-    // 抽屉最上面的「首页」回到首页。
-    await tester.tap(find.byTooltip('个人中心'));
-    await settle(tester);
-    await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('首页')));
+    // 系统返回回到首页，不会退出应用。
+    await tester.binding.handlePopRoute();
     await settle(tester);
     expect(find.text('华语'), findsNothing);
     expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('back on another tab goes to home first', (tester) async {
+    await pumpHome(tester, const Size(400, 900));
+    await tester.tap(find.text('发现'));
+    await settle(tester);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
   });
 
   testWidgets('home keeps its data after switching tabs; refresh fetches again', (tester) async {
