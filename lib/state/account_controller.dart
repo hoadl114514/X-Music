@@ -106,6 +106,9 @@ class AccountController extends ChangeNotifier {
   /// 按 id 取最新的歌单信息，列表里没有时返回 [fallback]。
   Playlist latest(Playlist fallback) => _find(fallback.id) ?? fallback;
 
+  /// 重新拉取歌单列表（音乐库切回来、下拉刷新时用）。
+  Future<void> reloadPlaylists() => _reloadPlaylists();
+
   Future<void> _reloadPlaylists() async {
     final p = _profile;
     if (p == null) return;

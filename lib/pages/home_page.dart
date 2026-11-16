@@ -10,7 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
-import 'library/playlist_editor.dart';
+import 'library/library_page.dart';
 import 'library/song_actions.dart';
 import 'login_page.dart';
 import 'music/daily_songs_page.dart';
@@ -21,7 +21,7 @@ const _dailyPalette = [Color(0xFF3B2A4D), Color(0xFFB0605A), Color(0xFFE8B66B)];
 const _likedPalette = [Color(0xFFE85A9A), Color(0xFF6A4BC4), Color(0xFF1F1A3A)];
 const _fmPalette = [Color(0xFF1B1036), Color(0xFFE0367F), Color(0xFF29D3F0)];
 
-/// 首页：每日推荐、我喜欢、私人 FM、根据你喜爱的歌曲推荐、我的歌单、推荐歌单。
+/// 首页：每日推荐、我喜欢、私人 FM、根据你喜爱的歌曲推荐、推荐歌单。
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.onNavigate});
 
@@ -32,7 +32,6 @@ class HomePage extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final hPad = width < 600 ? 16.0 : 24.0;
     final account = AccountScope.of(context);
-    final playlists = account.playlists;
 
     return Scrollbar(
       child: CustomScrollView(
@@ -63,7 +62,13 @@ class HomePage extends StatelessWidget {
                             final p? => playlistCoverFallback(context, p),
                             null => null,
                           },
-                          onTap: () => onNavigate(Destination.liked),
+                          onTap: () => switch (account.likedPlaylist) {
+                            final p? => LibraryPage.openLiked(context, p),
+                            null =>
+                              account.isLoggedIn
+                                  ? onNavigate(Destination.library)
+                                  : LoginPage.open(context),
+                          },
                         ),
                       ],
                     );
@@ -87,33 +92,8 @@ class HomePage extends StatelessWidget {
                 const SizedBox(height: 32),
                 // 登录状态变了（换号、退出）就重新拉推荐。
                 _SongRcmdSection(key: ValueKey(account.profile?.userId)),
-                const SizedBox(height: 32),
-                _SectionTitle(
-                  '我的歌单',
-                  trailing: account.isLoggedIn
-                      ? TextButton.icon(
-                          onPressed: () => showCreatePlaylistDialog(context),
-                          icon: const Icon(Icons.add_rounded, size: 20),
-                          label: const Text('新建'),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                if (!account.isLoggedIn)
-                  const SizedBox(height: 220, child: LoginPrompt(message: '登录后查看你的歌单'))
-                else if (playlists.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: Text('还没有歌单', style: TextStyle(color: AppColors.textSecondary)),
-                    ),
-                  ),
               ],
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 0),
-            sliver: SliverPlaylistGrid(playlists: playlists),
           ),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(hPad, 32, hPad, 16),

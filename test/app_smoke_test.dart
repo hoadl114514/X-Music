@@ -38,17 +38,18 @@ void main() {
     await pumpApp(tester, withQueue: false);
     expect(find.text('私人 FM'), findsOneWidget);
     expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
-    // 「我的歌单」在歌曲推荐下面，可能要往下滚才建出来。
-    await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -300));
-    await settle(tester);
-    expect(find.text('我的歌单'), findsOneWidget);
-    expect(find.text('登录后查看你的歌单'), findsOneWidget);
+    // 首页不再有「我的歌单」，歌单都在音乐库里。
+    expect(find.text('我的歌单'), findsNothing);
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -600));
     await settle(tester);
     expect(find.text('推荐歌单'), findsOneWidget);
     expect(find.byType(NavigationBar), findsOneWidget);
     // 没有在放的歌时不显示迷你播放条。
     expect(find.byTooltip('歌词'), findsNothing);
+
+    await tester.tap(find.text('音乐库'));
+    await settle(tester);
+    expect(find.text('登录后查看你的音乐库'), findsOneWidget);
   });
 
   testWidgets('avatar opens drawer; recent plays asks to log in', (tester) async {

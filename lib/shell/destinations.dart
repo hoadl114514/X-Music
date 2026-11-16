@@ -5,7 +5,7 @@ enum Destination {
   forYou('为我推荐', '首页', Icons.home_rounded),
   discover('发现音乐', '发现', Icons.explore_rounded),
   follow('关注', '关注', Icons.people_alt_rounded),
-  liked('我喜欢的音乐', '我喜欢', Icons.favorite_rounded),
+  library('音乐库', '音乐库', Icons.library_music_rounded),
   newSongs('新歌速递', '新歌', Icons.fiber_new_rounded),
   recent('最近播放', '最近', Icons.history_rounded),
   ranking('听歌排行', '排行', Icons.show_chart_rounded),
@@ -25,10 +25,10 @@ enum Destination {
   String get drawerLabel => this == forYou ? shortLabel : label;
 
   /// 底部导航。
-  static const tabs = [forYou, discover, follow, liked];
+  static const tabs = [forYou, discover, follow, library];
 
   /// 切回来时要在后台刷新的页面。
-  static const refreshOnVisit = {liked, recent, ranking};
+  static const refreshOnVisit = {library, recent, ranking};
 
   /// 抽屉侧栏里的菜单。
   static const drawer = [forYou, newSongs, ranking, recent, updates, settings];

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app/app.dart';
 import '../pages/home_page.dart';
-import '../pages/library/liked_page.dart';
+import '../pages/library/library_page.dart';
 import '../pages/music/discover_page.dart';
 import '../pages/music/new_songs_page.dart';
 import '../pages/music/ranking_page.dart';
@@ -63,7 +63,7 @@ class _AppShellState extends State<AppShell> {
 
   Widget _page(Destination d) => switch (d) {
     Destination.forYou => HomePage(onNavigate: _go),
-    Destination.liked => const LikedPage(),
+    Destination.library => const LibraryPage(),
     Destination.discover => const DiscoverPage(),
     Destination.newSongs => const NewSongsPage(),
     Destination.recent => const RecentPage(),
