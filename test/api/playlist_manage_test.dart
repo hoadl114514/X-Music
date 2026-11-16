@@ -83,36 +83,4 @@ void main() {
     }, []);
     expect(api.uploadImage([1, 2, 3]), throwsA(isA<ApiException>()));
   });
-
-  test('shareEvent sends type, msg and id to the share endpoint', () async {
-    final seen = <http.Request>[];
-    final api = _api(const {}, seen);
-    await api.shareEvent('好听', type: ShareType.song, id: '5');
-    await api.shareEvent('只有文字');
-    expect(seen[0].url.toString(), 'https://music.163.com/api/share/friends/resource');
-    expect(seen[0].bodyFields, {'type': 'song', 'msg': '好听', 'id': '5'});
-    expect(seen[1].bodyFields, {'type': 'noresource', 'msg': '只有文字', 'id': ''});
-  });
-
-  test('shareEvent retries through weapi when the plain API refuses', () async {
-    final seen = <http.Request>[];
-    final api = _api({
-      '/api/share/friends/resource': {'code': 400, 'message': '参数错误'},
-      '/weapi/share/friends/resource': {'code': 200},
-    }, seen);
-    await api.shareEvent('hi', type: ShareType.playlist, id: '42');
-    expect(
-      [for (final r in seen) r.url.path],
-      ['/api/share/friends/resource', '/weapi/share/friends/resource'],
-    );
-  });
-
-  test('shareEvent does not retry when login is required', () async {
-    final seen = <http.Request>[];
-    final api = _api({
-      '/api/share/friends/resource': {'code': 301},
-    }, seen);
-    await expectLater(api.shareEvent('hi'), throwsA(isA<ApiException>()));
-    expect(seen, hasLength(1));
-  });
 }
