@@ -148,6 +148,13 @@ class PlayerController extends ChangeNotifier {
 
   Timer? _timer;
 
+  /// 播放中每 50ms 一次的进度推进。[notifyListeners] 不包含它，见 [ticks]。
+  final _ticks = _Ticks();
+
+  /// 播放进度每次推进时通知（约 50ms 一次）。其他状态变化走 [addListener]。
+  /// 要显示实时进度的 widget 用 [PlayerScope.ticking]。
+  Listenable get ticks => _ticks;
+
   /// 私人 FM 这类"无尽队列"：放到最后一首时调用它取下一批追加到队列。
   Future<List<Song>> Function()? _extend;
 
@@ -829,7 +836,8 @@ class PlayerController extends ChangeNotifier {
       final step = p - _position;
       if (step > Duration.zero && step < const Duration(seconds: 2)) _listened += step;
       _position = p;
-      notifyListeners();
+      // 只通知关心进度的（进度条、歌词）；普通监听者不跟着每 50ms 重建，列表滚动才不卡。
+      _ticks.fire();
     });
   }
 
@@ -841,6 +849,7 @@ class PlayerController extends ChangeNotifier {
   @override
   void dispose() {
     _stopTicker();
+    _ticks.dispose();
     _retryTimer?.cancel();
     _sleepTimer?.cancel();
     for (final s in _subs) {
@@ -852,7 +861,12 @@ class PlayerController extends ChangeNotifier {
   }
 }
 
-/// 把 [PlayerController] 挂到树上；依赖它的 widget 会在进度变化时重建。
+class _Ticks extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
+
+/// 把 [PlayerController] 挂到树上；依赖它的 widget 在播放状态变化（切歌、播放 / 暂停……）时重建，
+/// 播放进度推进时不重建。要跟着进度走的用 [PlayerScope.ticking]。
 class PlayerScope extends InheritedNotifier<PlayerController> {
   const PlayerScope({super.key, required PlayerController controller, required super.child})
     : super(notifier: controller);
@@ -860,7 +874,19 @@ class PlayerScope extends InheritedNotifier<PlayerController> {
   static PlayerController of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PlayerScope>()!.notifier!;
 
+  /// 同 [of]，另外在播放进度推进时（约 50ms 一次）也重建。只给进度条、歌词这类用。
+  static PlayerController ticking(BuildContext context) {
+    context.dependOnInheritedWidgetOfExactType<PlayerTickScope>();
+    return of(context);
+  }
+
   /// 只取引用、不订阅变化，用于按钮回调。
   static PlayerController read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<PlayerScope>()!.notifier!;
+}
+
+/// 播放进度的通知，放在 [PlayerScope] 下面，见 [PlayerScope.ticking]。
+class PlayerTickScope extends InheritedNotifier<Listenable> {
+  PlayerTickScope({super.key, required PlayerController controller, required super.child})
+    : super(notifier: controller.ticks);
 }

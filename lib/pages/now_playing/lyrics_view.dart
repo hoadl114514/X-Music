@@ -95,7 +95,7 @@ class _LyricsViewState extends State<LyricsView> {
   }
 
   Widget _build(BuildContext context) {
-    final player = PlayerScope.of(context);
+    final player = PlayerScope.ticking(context);
     final settings = AppScope.of(context).settings;
     final lyrics = player.lyrics;
     final lines = lyrics.lines;

@@ -117,12 +117,7 @@ class PlayerBar extends StatelessWidget {
                 ],
               ),
             ),
-            Positioned(
-              left: 8,
-              right: 8,
-              bottom: 0,
-              child: _ProgressLine(fraction: player.progress),
-            ),
+            const Positioned(left: 8, right: 8, bottom: 0, child: _ProgressLine()),
           ],
         ),
       ),
@@ -178,13 +173,13 @@ class FloatingBottomBar extends StatelessWidget {
 double floatingBarsInset(BuildContext context) => MediaQuery.paddingOf(context).bottom;
 
 /// 卡片底边的细进度线，只显示不响应手势（拖动进度到播放页里操作）。
+/// 迷你播放条底部的进度线。自己订阅进度，播放时只重建这一小块。
 class _ProgressLine extends StatelessWidget {
-  const _ProgressLine({required this.fraction});
-
-  final double fraction;
+  const _ProgressLine();
 
   @override
   Widget build(BuildContext context) {
+    final fraction = PlayerScope.ticking(context).progress;
     return ClipRRect(
       borderRadius: BorderRadius.circular(1),
       child: SizedBox(

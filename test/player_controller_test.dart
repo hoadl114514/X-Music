@@ -50,6 +50,19 @@ void main() {
     expect(player.isPlaying, isTrue);
   });
 
+  test('progress ticks notify ticks listeners only', () async {
+    await player.playQueue(queue, title: '测试歌单');
+    var changes = 0;
+    var ticks = 0;
+    player.addListener(() => changes++);
+    player.ticks.addListener(() => ticks++);
+    engine.advance(const Duration(seconds: 1));
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    expect(ticks, greaterThan(0));
+    expect(changes, 0);
+    expect(player.position, const Duration(seconds: 1));
+  });
+
   test('AudioQuality.pick falls back to the lowest when everything is above', () {
     expect(
       AudioQuality.pick([AudioQuality.lossless, AudioQuality.hires], AudioQuality.standard),
