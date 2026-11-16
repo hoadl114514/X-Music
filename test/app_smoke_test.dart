@@ -36,9 +36,13 @@ void main() {
 
   testWidgets('home shows login prompts and recommendations when logged out', (tester) async {
     await pumpApp(tester, withQueue: false);
+    expect(find.text('私人 FM'), findsOneWidget);
+    expect(find.text('新歌精选'), findsOneWidget);
+    // 「我的歌单」在新歌精选下面，可能要往下滚才建出来。
+    await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -300));
+    await settle(tester);
     expect(find.text('我的歌单'), findsOneWidget);
     expect(find.text('登录后查看你的歌单'), findsOneWidget);
-    expect(find.text('私人 FM'), findsOneWidget);
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -600));
     await settle(tester);
     expect(find.text('推荐歌单'), findsOneWidget);

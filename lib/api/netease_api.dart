@@ -487,6 +487,31 @@ class NeteaseApi {
     return [for (final p in _list(data['result'])) ?_parseRecommend(p)];
   }
 
+  /// 推荐新歌（首页「新歌精选」），不需要登录。
+  Future<List<Song>> newSongs({int limit = 20}) async {
+    final data = await _api('https://music.163.com/api/personalized/newsong', {
+      'type': 'recommend',
+      'limit': '$limit',
+      'areaId': '0',
+    });
+    return [
+      for (final r in _list(data['result']))
+        if (r is Map) ?parseSong(r['song']),
+    ];
+  }
+
+  /// 新歌速递：最近一周上架的新歌，约 100 首。[area] 是地区，见 [newSongAreas]。
+  Future<List<Song>> newSongExpress({int area = 0}) async {
+    final data = await _api('https://music.163.com/api/v1/discovery/new/songs', {
+      'areaId': '$area',
+      'total': 'true',
+    });
+    return [for (final s in _list(data['data'])) ?parseSong(s)];
+  }
+
+  /// 新歌速递的地区：名称和 areaId。
+  static const newSongAreas = [('全部', 0), ('华语', 7), ('欧美', 96), ('日本', 8), ('韩国', 16)];
+
   /// 官方排行榜。[Playlist.description] 是更新频率。
   Future<List<Playlist>> toplists() async {
     final data = await _api('https://music.163.com/api/toplist', const {});
@@ -1109,6 +1134,8 @@ class NeteaseApi {
     final alias = [
       ..._list(raw['tns']),
       ..._list(raw['alia']),
+      // 旧版接口（新歌推荐等）的别名字段。
+      ..._list(raw['alias']),
     ].map((e) => '$e').where((e) => e.isNotEmpty);
     return Song(
       id: '${raw['id']}',

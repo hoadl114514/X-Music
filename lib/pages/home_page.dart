@@ -7,12 +7,15 @@ import '../shell/destinations.dart';
 import '../state/account_controller.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/copy_sheet.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
 import 'library/playlist_editor.dart';
+import 'library/song_actions.dart';
 import 'login_page.dart';
 import 'music/daily_songs_page.dart';
+import 'music/new_songs_page.dart';
 import 'now_playing/now_playing_page.dart';
 import '../shell/player_bar.dart';
 
@@ -20,7 +23,7 @@ const _dailyPalette = [Color(0xFF3B2A4D), Color(0xFFB0605A), Color(0xFFE8B66B)];
 const _likedPalette = [Color(0xFFE85A9A), Color(0xFF6A4BC4), Color(0xFF1F1A3A)];
 const _fmPalette = [Color(0xFF1B1036), Color(0xFFE0367F), Color(0xFF29D3F0)];
 
-/// 首页：每日推荐、我喜欢、私人 FM、我的歌单、推荐歌单。
+/// 首页：每日推荐、我喜欢、私人 FM、新歌精选、我的歌单、推荐歌单。
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.onNavigate});
 
@@ -83,6 +86,9 @@ class HomePage extends StatelessWidget {
                     );
                   },
                 ),
+                const SizedBox(height: 32),
+                // 登录状态变了（换号、退出）就重新拉推荐。
+                _NewSongs(key: ValueKey(account.profile?.userId)),
                 const SizedBox(height: 32),
                 _SectionTitle(
                   '我的歌单',
@@ -166,6 +172,227 @@ class _RecommendedPlaylistsState extends State<_RecommendedPlaylists> {
   }
 }
 
+/// 新歌精选：横向翻页，每列 4 首。手机上露出下一列的一角，宽屏一次显示几列并带翻页按钮。
+class _NewSongs extends StatefulWidget {
+  const _NewSongs({super.key});
+
+  @override
+  State<_NewSongs> createState() => _NewSongsState();
+}
+
+class _NewSongsState extends State<_NewSongs> {
+  static const _perColumn = 4;
+  static const _rowHeight = 68.0;
+
+  late Future<List<Song>> _future = _load();
+  PageController? _pages;
+
+  Future<List<Song>> _load() => AppScope.of(context).api.newSongs(limit: 20);
+
+  @override
+  void dispose() {
+    _pages?.dispose();
+    super.dispose();
+  }
+
+  /// 视口占比变了（窗口缩放）就换一个 PageController，尽量停在原来那一列。
+  PageController _controllerFor(double fraction) {
+    final old = _pages;
+    if (old != null && old.viewportFraction == fraction) return old;
+    final page = old != null && old.hasClients ? (old.page ?? 0).round() : 0;
+    final next = PageController(viewportFraction: fraction, initialPage: page);
+    // 旧的还挂在这一帧的 PageView 上，下一帧再释放。
+    if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    return _pages = next;
+  }
+
+  void _turn(int delta, int visible, int columns) {
+    final pages = _pages;
+    if (pages == null || !pages.hasClients) return;
+    final current = (pages.page ?? 0).round();
+    final target = (current + delta * visible).clamp(0, (columns - visible).clamp(0, columns));
+    pages.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _body(AsyncSnapshot<List<Song>> snap, List<Song>? songs, int columns, double fraction) {
+    if (snap.hasError) {
+      return Center(
+        child: TextButton(
+          onPressed: () => setState(() => _future = _load()),
+          child: const Text('新歌加载失败，点击重试'),
+        ),
+      );
+    }
+    if (songs == null) return const Center(child: CircularProgressIndicator());
+    if (songs.isEmpty) {
+      return const Center(
+        child: Text('暂无新歌', style: TextStyle(color: AppColors.textSecondary)),
+      );
+    }
+    return PageView.builder(
+      controller: _controllerFor(fraction),
+      padEnds: false,
+      itemCount: columns,
+      itemBuilder: (context, col) => Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Column(
+          children: [
+            for (var i = col * _perColumn; i < songs.length && i < (col + 1) * _perColumn; i++)
+              _NewSongRow(
+                songs: songs,
+                index: i,
+                height: _rowHeight,
+                divider: i % _perColumn != _perColumn - 1 && i != songs.length - 1,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final narrow = c.maxWidth < 600;
+        // 手机：一列占 88%，露出下一列；宽屏：每列约 360 宽，至少 2 列。
+        final visible = narrow ? 1 : (c.maxWidth / 360).floor().clamp(2, 5);
+        final fraction = narrow ? 0.88 : 1 / visible;
+        return FutureBuilder<List<Song>>(
+          future: _future,
+          builder: (context, snap) {
+            final songs = snap.data;
+            final columns = songs == null ? 0 : (songs.length / _perColumn).ceil();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _SectionTitle(
+                  '新歌精选',
+                  onTap: () => NewSongsPage.open(context),
+                  trailing: !narrow && columns > visible
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: '上一页',
+                              onPressed: () => _turn(-1, visible, columns),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                            IconButton(
+                              tooltip: '下一页',
+                              onPressed: () => _turn(1, visible, columns),
+                              icon: const Icon(Icons.chevron_right_rounded),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: _rowHeight * _perColumn,
+                  child: _body(snap, songs, columns, fraction),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// 新歌精选的一行：封面、歌名、歌手、更多按钮。点了从这首开始放整个新歌精选。
+class _NewSongRow extends StatelessWidget {
+  const _NewSongRow({
+    required this.songs,
+    required this.index,
+    required this.height,
+    required this.divider,
+  });
+
+  final List<Song> songs;
+  final int index;
+  final double height;
+
+  /// 文字下面画分隔线（每列最后一行不画）。
+  final bool divider;
+
+  @override
+  Widget build(BuildContext context) {
+    final song = songs[index];
+    final playing = PlayerScope.of(context).current?.id == song.id;
+    return SizedBox(
+      height: height,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: () => PlayerScope.read(context).playQueue(songs, start: index, title: '新歌精选'),
+        onLongPress: () => showCopySongSheet(context, song),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 52,
+              child: CoverArt(
+                palette: song.palette,
+                seed: song.id,
+                imageUrl: song.coverUrl,
+                radius: AppRadius.card,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: divider
+                      ? const Border(bottom: BorderSide(color: AppColors.border))
+                      : null,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: playing ? AppColors.accent : AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '更多',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+                      onPressed: () => showSongActions(context, song),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Greeting extends StatelessWidget {
   const _Greeting();
 
@@ -186,9 +413,12 @@ class _Greeting extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.trailing});
+  const _SectionTitle(this.title, {this.trailing, this.onTap});
 
   final String title;
+
+  /// 点标题（标题后面带一个箭头），例如进「新歌速递」。
+  final VoidCallback? onTap;
 
   /// 标题右侧的按钮（如「新建」）。
   final Widget? trailing;
@@ -206,7 +436,20 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
+        if (onTap case final tap?)
+          InkWell(
+            onTap: tap,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+              ],
+            ),
+          )
+        else
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
         if (trailing case final t?) ...[const Spacer(), t],
       ],
     );
