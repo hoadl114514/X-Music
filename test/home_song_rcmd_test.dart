@@ -144,9 +144,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('recommendations stay the same after leaving home; refresh fetches again', (
-    tester,
-  ) async {
+  testWidgets('home keeps its data after switching tabs; refresh fetches again', (tester) async {
     await pumpHome(tester, const Size(400, 1400));
     int fetches() => requests.where((p) => p == '/api/homepage/block/page').length;
     expect(fetches(), 1);
@@ -157,6 +155,8 @@ void main() {
     await settle(tester);
     expect(find.text('推荐1'), findsOneWidget);
     expect(fetches(), 1);
+    // 首页切走后不销毁，推荐歌单也不重新拉。
+    expect(requests.where((p) => p == '/api/personalized/playlist').length, 1);
 
     await tester.tap(find.byTooltip('换一批'));
     await settle(tester);

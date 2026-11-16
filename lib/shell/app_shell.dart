@@ -28,6 +28,9 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   Destination _current = Destination.forYou;
 
+  /// 进过的页面。切走后不销毁，回来时数据、图片和滚动位置都还在，不用重新加载。
+  final _visited = <Destination>{Destination.forYou};
+
   /// 最近一次所在的底部标签。从抽屉进入的页面不属于任何标签，此时保持原高亮。
   int _tab = 0;
   StreamSubscription<String>? _notices;
@@ -54,7 +57,7 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  Widget _page() => switch (_current) {
+  Widget _page(Destination d) => switch (d) {
     Destination.forYou => HomePage(onNavigate: _go),
     Destination.liked => const LikedPage(),
     Destination.discover => const DiscoverPage(),
@@ -68,6 +71,7 @@ class _AppShellState extends State<AppShell> {
 
   void _go(Destination d) => setState(() {
     _current = d;
+    _visited.add(d);
     final i = Destination.tabs.indexOf(d);
     if (i >= 0) _tab = i;
   });
@@ -84,9 +88,15 @@ class _AppShellState extends State<AppShell> {
           children: [
             const TopBar(),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: KeyedSubtree(key: ValueKey(_current), child: _page()),
+              // 没显示的页面留在后台（动画暂停），只建进过的。
+              child: IndexedStack(
+                index: _current.index,
+                children: [
+                  for (final d in Destination.values)
+                    _visited.contains(d)
+                        ? KeyedSubtree(key: ValueKey(d), child: _page(d))
+                        : const SizedBox.shrink(),
+                ],
               ),
             ),
           ],
