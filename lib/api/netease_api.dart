@@ -487,17 +487,57 @@ class NeteaseApi {
     return [for (final p in _list(data['result'])) ?_parseRecommend(p)];
   }
 
-  /// 推荐新歌（首页「新歌精选」），不需要登录。
-  Future<List<Song>> newSongs({int limit = 20}) async {
-    final data = await _api('https://music.163.com/api/personalized/newsong', {
-      'type': 'recommend',
-      'limit': '$limit',
-      'areaId': '0',
+  /// 首页「根据你喜爱的歌曲推荐」：取官方首页里的歌曲推荐板块（HOMEPAGE_BLOCK_STYLE_RCMD）。
+  /// 登录后按口味推荐，未登录是通用推荐。每次调用都会换一批。
+  Future<SongRcmdBlock> songRcmd() async {
+    final data = await _api('https://music.163.com/api/homepage/block/page', {
+      'refresh': 'true',
+      'cursor': '',
     });
-    return [
-      for (final r in _list(data['result']))
-        if (r is Map) ?parseSong(r['song']),
-    ];
+    final d = data['data'];
+    final block = _list(d is Map ? d['blocks'] : null).firstWhere(
+      (b) => b is Map && b['blockCode'] == 'HOMEPAGE_BLOCK_STYLE_RCMD',
+      orElse: () => null,
+    );
+    if (block is! Map) return const SongRcmdBlock(title: _songRcmdTitle, items: []);
+    final ui = block['uiElement'];
+    final sub = ui is Map ? ui['subTitle'] : null;
+    return SongRcmdBlock(
+      title: (sub is Map ? _str(sub['title']) : null) ?? _songRcmdTitle,
+      items: [
+        for (final c in _list(block['creatives']))
+          if (c is Map)
+            for (final r in _list(c['resources'])) ?_parseSongRcmd(r),
+      ],
+    );
+  }
+
+  static const _songRcmdTitle = '根据你喜爱的歌曲推荐';
+
+  static SongRcmd? _parseSongRcmd(Object? r) {
+    if (r is! Map || r['resourceType'] != 'song') return null;
+    final ext = r['resourceExtInfo'];
+    if (ext is! Map) return null;
+    final song = parseSong(ext['song']) ?? parseSong(ext['songData']);
+    if (song == null) return null;
+    final ui = r['uiElement'];
+    final sub = ui is Map ? ui['subTitle'] : null;
+    final labels = ui is Map ? _list(ui['labelTexts']) : const [];
+    // 推荐理由：优先标签；副标题是热评摘录（songRcmdFromComment）时太长，不当标签用。
+    final tag =
+        labels.map((e) => _str(e)).nonNulls.firstOrNull ??
+        (sub is Map && sub['titleType'] != 'songRcmdFromComment' ? _str(sub['title']) : null);
+    final privilege = ext['songPrivilege'];
+    final level = privilege is Map ? _str(privilege['playMaxBrLevel']) : null;
+    return SongRcmd(
+      song: song,
+      tag: tag,
+      quality: switch (level) {
+        'hires' => 'Hi-Res',
+        'lossless' => 'SQ',
+        _ => null,
+      },
+    );
   }
 
   /// 新歌速递：最近一周上架的新歌，约 100 首。[area] 是地区，见 [newSongAreas]。

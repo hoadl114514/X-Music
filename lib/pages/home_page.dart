@@ -7,7 +7,6 @@ import '../shell/destinations.dart';
 import '../state/account_controller.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
-import '../widgets/copy_sheet.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
@@ -15,7 +14,6 @@ import 'library/playlist_editor.dart';
 import 'library/song_actions.dart';
 import 'login_page.dart';
 import 'music/daily_songs_page.dart';
-import 'music/new_songs_page.dart';
 import 'now_playing/now_playing_page.dart';
 import '../shell/player_bar.dart';
 
@@ -23,7 +21,7 @@ const _dailyPalette = [Color(0xFF3B2A4D), Color(0xFFB0605A), Color(0xFFE8B66B)];
 const _likedPalette = [Color(0xFFE85A9A), Color(0xFF6A4BC4), Color(0xFF1F1A3A)];
 const _fmPalette = [Color(0xFF1B1036), Color(0xFFE0367F), Color(0xFF29D3F0)];
 
-/// 首页：每日推荐、我喜欢、私人 FM、新歌精选、我的歌单、推荐歌单。
+/// 首页：每日推荐、我喜欢、私人 FM、根据你喜爱的歌曲推荐、我的歌单、推荐歌单。
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.onNavigate});
 
@@ -88,7 +86,7 @@ class HomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 32),
                 // 登录状态变了（换号、退出）就重新拉推荐。
-                _NewSongs(key: ValueKey(account.profile?.userId)),
+                _SongRcmdSection(key: ValueKey(account.profile?.userId)),
                 const SizedBox(height: 32),
                 _SectionTitle(
                   '我的歌单',
@@ -172,22 +170,22 @@ class _RecommendedPlaylistsState extends State<_RecommendedPlaylists> {
   }
 }
 
-/// 新歌精选：横向翻页，每列 4 首。手机上露出下一列的一角，宽屏一次显示几列并带翻页按钮。
-class _NewSongs extends StatefulWidget {
-  const _NewSongs({super.key});
+/// 根据你喜爱的歌曲推荐：横向翻页，每列 3 首。手机上露出下一列的一角，宽屏一次显示几列并带翻页按钮。
+class _SongRcmdSection extends StatefulWidget {
+  const _SongRcmdSection({super.key});
 
   @override
-  State<_NewSongs> createState() => _NewSongsState();
+  State<_SongRcmdSection> createState() => _SongRcmdSectionState();
 }
 
-class _NewSongsState extends State<_NewSongs> {
-  static const _perColumn = 4;
-  static const _rowHeight = 68.0;
+class _SongRcmdSectionState extends State<_SongRcmdSection> {
+  static const _perColumn = 3;
+  static const _rowHeight = 76.0;
 
-  late Future<List<Song>> _future = _load();
+  late Future<SongRcmdBlock> _future = _load();
   PageController? _pages;
 
-  Future<List<Song>> _load() => AppScope.of(context).api.newSongs(limit: 20);
+  Future<SongRcmdBlock> _load() => AppScope.of(context).api.songRcmd();
 
   @override
   void dispose() {
@@ -218,21 +216,27 @@ class _NewSongsState extends State<_NewSongs> {
     );
   }
 
-  Widget _body(AsyncSnapshot<List<Song>> snap, List<Song>? songs, int columns, double fraction) {
+  Widget _body(
+    AsyncSnapshot<SongRcmdBlock> snap,
+    List<SongRcmd>? items,
+    int columns,
+    double fraction,
+  ) {
     if (snap.hasError) {
       return Center(
         child: TextButton(
           onPressed: () => setState(() => _future = _load()),
-          child: const Text('新歌加载失败，点击重试'),
+          child: const Text('推荐加载失败，点击重试'),
         ),
       );
     }
-    if (songs == null) return const Center(child: CircularProgressIndicator());
-    if (songs.isEmpty) {
+    if (items == null) return const Center(child: CircularProgressIndicator());
+    if (items.isEmpty) {
       return const Center(
-        child: Text('暂无新歌', style: TextStyle(color: AppColors.textSecondary)),
+        child: Text('暂无推荐', style: TextStyle(color: AppColors.textSecondary)),
       );
     }
+    final songs = [for (final i in items) i.song];
     return PageView.builder(
       controller: _controllerFor(fraction),
       padEnds: false,
@@ -241,13 +245,8 @@ class _NewSongsState extends State<_NewSongs> {
         padding: const EdgeInsets.only(right: 16),
         child: Column(
           children: [
-            for (var i = col * _perColumn; i < songs.length && i < (col + 1) * _perColumn; i++)
-              _NewSongRow(
-                songs: songs,
-                index: i,
-                height: _rowHeight,
-                divider: i % _perColumn != _perColumn - 1 && i != songs.length - 1,
-              ),
+            for (var i = col * _perColumn; i < items.length && i < (col + 1) * _perColumn; i++)
+              _SongRcmdRow(item: items[i], songs: songs, index: i, height: _rowHeight),
           ],
         ),
       ),
@@ -262,39 +261,43 @@ class _NewSongsState extends State<_NewSongs> {
         // 手机：一列占 88%，露出下一列；宽屏：每列约 360 宽，至少 2 列。
         final visible = narrow ? 1 : (c.maxWidth / 360).floor().clamp(2, 5);
         final fraction = narrow ? 0.88 : 1 / visible;
-        return FutureBuilder<List<Song>>(
+        return FutureBuilder<SongRcmdBlock>(
           future: _future,
           builder: (context, snap) {
-            final songs = snap.data;
-            final columns = songs == null ? 0 : (songs.length / _perColumn).ceil();
+            final items = snap.data?.items;
+            final columns = items == null ? 0 : (items.length / _perColumn).ceil();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SectionTitle(
-                  '新歌精选',
-                  onTap: () => NewSongsPage.open(context),
-                  trailing: !narrow && columns > visible
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: '上一页',
-                              onPressed: () => _turn(-1, visible, columns),
-                              icon: const Icon(Icons.chevron_left_rounded),
-                            ),
-                            IconButton(
-                              tooltip: '下一页',
-                              onPressed: () => _turn(1, visible, columns),
-                              icon: const Icon(Icons.chevron_right_rounded),
-                            ),
-                          ],
-                        )
-                      : null,
+                  snap.data?.title ?? '根据你喜爱的歌曲推荐',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: '换一批',
+                        onPressed: () => setState(() => _future = _load()),
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                      if (!narrow && columns > visible) ...[
+                        IconButton(
+                          tooltip: '上一页',
+                          onPressed: () => _turn(-1, visible, columns),
+                          icon: const Icon(Icons.chevron_left_rounded),
+                        ),
+                        IconButton(
+                          tooltip: '下一页',
+                          onPressed: () => _turn(1, visible, columns),
+                          icon: const Icon(Icons.chevron_right_rounded),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: _rowHeight * _perColumn,
-                  child: _body(snap, songs, columns, fraction),
+                  child: _body(snap, items, columns, fraction),
                 ),
               ],
             );
@@ -305,36 +308,39 @@ class _NewSongsState extends State<_NewSongs> {
   }
 }
 
-/// 新歌精选的一行：封面、歌名、歌手、更多按钮。点了从这首开始放整个新歌精选。
-class _NewSongRow extends StatelessWidget {
-  const _NewSongRow({
+/// 推荐的一行：封面、歌名、（喜欢 / 推荐理由或音质）+ 歌手、播放按钮。
+/// 点了从这首开始放整组推荐，长按打开歌曲菜单。
+class _SongRcmdRow extends StatelessWidget {
+  const _SongRcmdRow({
+    required this.item,
     required this.songs,
     required this.index,
     required this.height,
-    required this.divider,
   });
 
+  final SongRcmd item;
   final List<Song> songs;
   final int index;
   final double height;
 
-  /// 文字下面画分隔线（每列最后一行不画）。
-  final bool divider;
-
   @override
   Widget build(BuildContext context) {
-    final song = songs[index];
+    final song = item.song;
     final playing = PlayerScope.of(context).current?.id == song.id;
+    final liked = AccountScope.of(context).isLiked(song.id);
+    void play() => PlayerScope.read(context).playQueue(songs, start: index, title: '为你推荐');
+    // 推荐理由优先，没有时显示音质角标，和官方一样两者只显示一个。
+    final badge = item.tag ?? item.quality;
     return SizedBox(
       height: height,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () => PlayerScope.read(context).playQueue(songs, start: index, title: '新歌精选'),
-        onLongPress: () => showCopySongSheet(context, song),
+        onTap: play,
+        onLongPress: () => showSongActions(context, song),
         child: Row(
           children: [
             SizedBox(
-              width: 52,
+              width: 60,
               child: CoverArt(
                 palette: song.palette,
                 seed: song.id,
@@ -344,49 +350,84 @@ class _NewSongRow extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  border: divider
-                      ? const Border(bottom: BorderSide(color: AppColors.border))
-                      : null,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            song.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: playing ? AppColors.accent : AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            song.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
-                        ],
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: playing ? AppColors.accent : AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      if (liked) ...[
+                        const Icon(Icons.favorite_rounded, size: 14, color: AppColors.negative),
+                        const SizedBox(width: 4),
+                      ],
+                      if (badge != null) ...[
+                        Flexible(flex: 0, child: _RcmdBadge(badge, filled: item.tag != null)),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          song.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: '更多',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
-                      onPressed: () => showSongActions(context, song),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
             ),
+            IconButton(
+              tooltip: '播放',
+              onPressed: play,
+              icon: const Icon(Icons.play_arrow_rounded, color: AppColors.textSecondary),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 红色小标签：推荐理由（浅底）或音质（描边）。
+class _RcmdBadge extends StatelessWidget {
+  const _RcmdBadge(this.text, {required this.filled});
+
+  final String text;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 160),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: filled ? AppColors.negative.withValues(alpha: 0.15) : null,
+          border: Border.all(color: AppColors.negative.withValues(alpha: filled ? 0.25 : 0.8)),
+          borderRadius: BorderRadius.circular(AppRadius.tag),
+        ),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.negative,
+            height: 1.3,
+          ),
         ),
       ),
     );
@@ -413,12 +454,9 @@ class _Greeting extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.trailing, this.onTap});
+  const _SectionTitle(this.title, {this.trailing});
 
   final String title;
-
-  /// 点标题（标题后面带一个箭头），例如进「新歌速递」。
-  final VoidCallback? onTap;
 
   /// 标题右侧的按钮（如「新建」）。
   final Widget? trailing;
@@ -436,20 +474,14 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        if (onTap case final tap?)
-          InkWell(
-            onTap: tap,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
-              ],
-            ),
-          )
-        else
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
         if (trailing case final t?) ...[const Spacer(), t],
       ],
     );
