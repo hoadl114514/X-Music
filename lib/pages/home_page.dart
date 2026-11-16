@@ -150,7 +150,9 @@ class _RecommendedPlaylistsState extends State<_RecommendedPlaylists> {
         if (snap.hasError) {
           return SliverToBoxAdapter(
             child: TextButton(
-              onPressed: () => setState(() => _future = _load()),
+              onPressed: () => setState(() {
+                _future = _load();
+              }),
               child: const Text('推荐加载失败，点击重试'),
             ),
           );
@@ -170,6 +172,13 @@ class _RecommendedPlaylistsState extends State<_RecommendedPlaylists> {
   }
 }
 
+/// 清空首页记住的推荐（测试用）。
+@visibleForTesting
+void resetHomeCaches() {
+  _SongRcmdSectionState._cache = null;
+  _SongRcmdSectionState._lastPage = 0;
+}
+
 /// 根据你喜爱的歌曲推荐：横向翻页，每列 3 首。手机上露出下一列的一角，宽屏一次显示几列并带翻页按钮。
 class _SongRcmdSection extends StatefulWidget {
   const _SongRcmdSection({super.key});
@@ -182,10 +191,43 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
   static const _perColumn = 3;
   static const _rowHeight = 76.0;
 
-  late Future<SongRcmdBlock> _future = _load();
+  /// 上一次的推荐和翻到的列，按账号记住。离开首页再回来不重新拉（接口每次都会换一批），
+  /// 只有点「换一批」、换账号或上次加载失败时才重新拉。
+  static ({int? userId, Future<SongRcmdBlock> future})? _cache;
+  static var _lastPage = 0;
+
+  late Future<SongRcmdBlock> _future = _cached();
   PageController? _pages;
 
-  Future<SongRcmdBlock> _load() => AppScope.of(context).api.songRcmd();
+  int? get _userId => AccountScope.read(context).profile?.userId;
+
+  Future<SongRcmdBlock> _cached() {
+    final c = _cache;
+    if (c != null && c.userId == _userId) return c.future;
+    _lastPage = 0;
+    return _load();
+  }
+
+  Future<SongRcmdBlock> _load() {
+    final future = AppScope.of(context).api.songRcmd();
+    final entry = (userId: _userId, future: future);
+    _cache = entry;
+    // 失败的结果不留，下次进首页重新拉。
+    future.catchError((Object _) {
+      if (identical(_cache, entry)) _cache = null;
+      return const SongRcmdBlock(title: '', items: []);
+    });
+    return future;
+  }
+
+  /// 换一批：重新拉并回到第一列。
+  void _refresh() {
+    _lastPage = 0;
+    if (_pages?.hasClients ?? false) _pages!.jumpToPage(0);
+    setState(() {
+      _future = _load();
+    });
+  }
 
   @override
   void dispose() {
@@ -197,7 +239,7 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
   PageController _controllerFor(double fraction) {
     final old = _pages;
     if (old != null && old.viewportFraction == fraction) return old;
-    final page = old != null && old.hasClients ? (old.page ?? 0).round() : 0;
+    final page = old != null && old.hasClients ? (old.page ?? 0).round() : _lastPage;
     final next = PageController(viewportFraction: fraction, initialPage: page);
     // 旧的还挂在这一帧的 PageView 上，下一帧再释放。
     if (old != null) WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
@@ -224,10 +266,7 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
   ) {
     if (snap.hasError) {
       return Center(
-        child: TextButton(
-          onPressed: () => setState(() => _future = _load()),
-          child: const Text('推荐加载失败，点击重试'),
-        ),
+        child: TextButton(onPressed: _refresh, child: const Text('推荐加载失败，点击重试')),
       );
     }
     if (items == null) return const Center(child: CircularProgressIndicator());
@@ -240,6 +279,7 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
     return PageView.builder(
       controller: _controllerFor(fraction),
       padEnds: false,
+      onPageChanged: (p) => _lastPage = p,
       itemCount: columns,
       itemBuilder: (context, col) => Padding(
         padding: const EdgeInsets.only(right: 16),
@@ -271,12 +311,14 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
               children: [
                 _SectionTitle(
                   snap.data?.title ?? '根据你喜爱的歌曲推荐',
+                  // 官方标题可能很长（如「听过的某某的人也在听」），允许折成两行。
+                  maxLines: 2,
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
                         tooltip: '换一批',
-                        onPressed: () => setState(() => _future = _load()),
+                        onPressed: _refresh,
                         icon: const Icon(Icons.refresh_rounded),
                       ),
                       if (!narrow && columns > visible) ...[
@@ -390,6 +432,7 @@ class _SongRcmdRow extends StatelessWidget {
             ),
             IconButton(
               tooltip: '播放',
+              visualDensity: VisualDensity.compact,
               onPressed: play,
               icon: const Icon(Icons.play_arrow_rounded, color: AppColors.textSecondary),
             ),
@@ -410,7 +453,7 @@ class _RcmdBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 160),
+      constraints: const BoxConstraints(maxWidth: 140),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
@@ -454,9 +497,10 @@ class _Greeting extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.trailing});
+  const _SectionTitle(this.title, {this.trailing, this.maxLines = 1});
 
   final String title;
+  final int maxLines;
 
   /// 标题右侧的按钮（如「新建」）。
   final Widget? trailing;
@@ -474,15 +518,15 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Flexible(
+        Expanded(
           child: Text(
             title,
-            maxLines: 1,
+            maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
-        if (trailing case final t?) ...[const Spacer(), t],
+        ?trailing,
       ],
     );
   }

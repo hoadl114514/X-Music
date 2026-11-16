@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
+import 'package:netease_client/pages/home_page.dart';
 
 import 'support/fakes.dart';
 
@@ -65,6 +66,13 @@ Map<String, Object?> _homepage() => {
 
 void main() {
   final requests = <String>[];
+  setUp(resetHomeCaches);
+
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
 
   Future<void> pumpHome(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;
@@ -133,6 +141,26 @@ void main() {
     }
     expect(requests, contains('/api/v1/discovery/new/songs'));
     expect(find.text('华语'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('recommendations stay the same after leaving home; refresh fetches again', (
+    tester,
+  ) async {
+    await pumpHome(tester, const Size(400, 1400));
+    int fetches() => requests.where((p) => p == '/api/homepage/block/page').length;
+    expect(fetches(), 1);
+
+    await tester.tap(find.text('发现'));
+    await settle(tester);
+    await tester.tap(find.text('首页'));
+    await settle(tester);
+    expect(find.text('推荐1'), findsOneWidget);
+    expect(fetches(), 1);
+
+    await tester.tap(find.byTooltip('换一批'));
+    await settle(tester);
+    expect(fetches(), 2);
     expect(tester.takeException(), isNull);
   });
 }
