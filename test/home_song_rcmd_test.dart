@@ -38,6 +38,28 @@ Map<String, Object?> _homepage() => {
     'blocks': [
       {'blockCode': 'HOMEPAGE_BANNER'},
       {
+        'blockCode': 'HOMEPAGE_BLOCK_MGC_PLAYLIST',
+        'uiElement': {
+          'subTitle': {'title': '某人的雷达歌单'},
+        },
+        'creatives': [
+          for (var i = 1; i <= 3; i++)
+            {
+              'resources': [
+                {
+                  'resourceType': 'list',
+                  'resourceId': '${900 + i}',
+                  'uiElement': {
+                    'mainTitle': {'title': '雷达$i'},
+                    'image': {'imageUrl': 'http://p1.music.126.net/r/$i.jpg'},
+                  },
+                  'resourceExtInfo': {'playCount': 25480000000},
+                },
+              ],
+            },
+        ],
+      },
+      {
         'blockCode': 'HOMEPAGE_BLOCK_STYLE_RCMD',
         'uiElement': {
           'subTitle': {'title': '根据你喜爱的歌曲推荐'},
@@ -118,6 +140,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     expect(find.text('推荐4').hitTestable(), findsOneWidget);
+
+    // 雷达歌单在歌曲推荐下面。
+    expect(find.text('某人的雷达歌单'), findsOneWidget);
+    expect(find.text('雷达1'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('某人的雷达歌单')).dy,
+      greaterThan(tester.getTopLeft(find.text('根据你喜爱的歌曲推荐')).dy),
+    );
     expect(tester.takeException(), isNull);
   });
 

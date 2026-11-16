@@ -487,28 +487,54 @@ class NeteaseApi {
     return [for (final p in _list(data['result'])) ?_parseRecommend(p)];
   }
 
-  /// 首页「根据你喜爱的歌曲推荐」：取官方首页里的歌曲推荐板块（HOMEPAGE_BLOCK_STYLE_RCMD）。
-  /// 登录后按口味推荐，未登录是通用推荐。每次调用都会换一批。
-  Future<SongRcmdBlock> songRcmd() async {
+  /// 官方首页的推荐：歌曲推荐板块（HOMEPAGE_BLOCK_STYLE_RCMD，「根据你喜爱的歌曲推荐」）
+  /// 和雷达歌单板块（HOMEPAGE_BLOCK_MGC_PLAYLIST）。登录后按口味推荐，未登录是通用推荐。
+  /// 每次调用歌曲推荐都会换一批。
+  Future<HomeFeed> homeFeed() async {
     final data = await _api('https://music.163.com/api/homepage/block/page', {
       'refresh': 'true',
       'cursor': '',
     });
     final d = data['data'];
-    final block = _list(d is Map ? d['blocks'] : null).firstWhere(
-      (b) => b is Map && b['blockCode'] == 'HOMEPAGE_BLOCK_STYLE_RCMD',
-      orElse: () => null,
+    final blocks = _list(d is Map ? d['blocks'] : null);
+    Map<Object?, Object?>? block(String code) =>
+        blocks.firstWhere((b) => b is Map && b['blockCode'] == code, orElse: () => null)
+            as Map<Object?, Object?>?;
+    String? title(Map<Object?, Object?>? b) {
+      final ui = b?['uiElement'];
+      final sub = ui is Map ? ui['subTitle'] : null;
+      return sub is Map ? _str(sub['title']) : null;
+    }
+
+    Iterable<Object?> resources(Map<Object?, Object?>? b) => [
+      for (final c in _list(b?['creatives']))
+        if (c is Map) ..._list(c['resources']),
+    ];
+
+    final songs = block('HOMEPAGE_BLOCK_STYLE_RCMD');
+    final radar = block('HOMEPAGE_BLOCK_MGC_PLAYLIST');
+    return HomeFeed(
+      songTitle: title(songs) ?? _songRcmdTitle,
+      songs: [for (final r in resources(songs)) ?_parseSongRcmd(r)],
+      radarTitle: title(radar) ?? '雷达歌单',
+      radar: [for (final r in resources(radar)) ?_parseRcmdPlaylist(r)],
     );
-    if (block is! Map) return const SongRcmdBlock(title: _songRcmdTitle, items: []);
-    final ui = block['uiElement'];
-    final sub = ui is Map ? ui['subTitle'] : null;
-    return SongRcmdBlock(
-      title: (sub is Map ? _str(sub['title']) : null) ?? _songRcmdTitle,
-      items: [
-        for (final c in _list(block['creatives']))
-          if (c is Map)
-            for (final r in _list(c['resources'])) ?_parseSongRcmd(r),
-      ],
+  }
+
+  static Playlist? _parseRcmdPlaylist(Object? r) {
+    if (r is! Map || r['resourceType'] != 'list') return null;
+    final id = _str('${r['resourceId'] ?? ''}');
+    final ui = r['uiElement'];
+    final main = ui is Map ? ui['mainTitle'] : null;
+    final image = ui is Map ? ui['image'] : null;
+    final ext = r['resourceExtInfo'];
+    final name = main is Map ? _str(main['title']) : null;
+    if (id == null || name == null) return null;
+    return Playlist(
+      id: id,
+      name: name,
+      playCount: ext is Map ? _int(ext['playCount']) : 0,
+      coverUrl: image is Map ? _https(_str(image['imageUrl'])) : null,
     );
   }
 

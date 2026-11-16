@@ -12,6 +12,7 @@ import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
 import 'library/library_page.dart';
 import 'library/song_actions.dart';
+import 'library/playlist_page.dart';
 import 'login_page.dart';
 import 'music/daily_songs_page.dart';
 import 'now_playing/now_playing_page.dart';
@@ -173,29 +174,29 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
 
   /// 上一次的推荐和翻到的列，按账号记住。离开首页再回来不重新拉（接口每次都会换一批），
   /// 只有点「换一批」、换账号或上次加载失败时才重新拉。
-  static ({int? userId, Future<SongRcmdBlock> future})? _cache;
+  static ({int? userId, Future<HomeFeed> future})? _cache;
   static var _lastPage = 0;
 
-  late Future<SongRcmdBlock> _future = _cached();
+  late Future<HomeFeed> _future = _cached();
   PageController? _pages;
 
   int? get _userId => AccountScope.read(context).profile?.userId;
 
-  Future<SongRcmdBlock> _cached() {
+  Future<HomeFeed> _cached() {
     final c = _cache;
     if (c != null && c.userId == _userId) return c.future;
     _lastPage = 0;
     return _load();
   }
 
-  Future<SongRcmdBlock> _load() {
-    final future = AppScope.of(context).api.songRcmd();
+  Future<HomeFeed> _load() {
+    final future = AppScope.of(context).api.homeFeed();
     final entry = (userId: _userId, future: future);
     _cache = entry;
     // 失败的结果不留，下次进首页重新拉。
     future.catchError((Object _) {
       if (identical(_cache, entry)) _cache = null;
-      return const SongRcmdBlock(title: '', items: []);
+      return const HomeFeed(songTitle: '', songs: []);
     });
     return future;
   }
@@ -238,12 +239,7 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
     );
   }
 
-  Widget _body(
-    AsyncSnapshot<SongRcmdBlock> snap,
-    List<SongRcmd>? items,
-    int columns,
-    double fraction,
-  ) {
+  Widget _body(AsyncSnapshot<HomeFeed> snap, List<SongRcmd>? items, int columns, double fraction) {
     if (snap.hasError) {
       return Center(
         child: TextButton(onPressed: _refresh, child: const Text('推荐加载失败，点击重试')),
@@ -281,16 +277,17 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
         // 手机：一列占 88%，露出下一列；宽屏：每列约 360 宽，至少 2 列。
         final visible = narrow ? 1 : (c.maxWidth / 360).floor().clamp(2, 5);
         final fraction = narrow ? 0.88 : 1 / visible;
-        return FutureBuilder<SongRcmdBlock>(
+        return FutureBuilder<HomeFeed>(
           future: _future,
           builder: (context, snap) {
-            final items = snap.data?.items;
+            final items = snap.data?.songs;
+            final radar = snap.data?.radar ?? const <Playlist>[];
             final columns = items == null ? 0 : (items.length / _perColumn).ceil();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SectionTitle(
-                  snap.data?.title ?? '根据你喜爱的歌曲推荐',
+                  snap.data?.songTitle ?? '根据你喜爱的歌曲推荐',
                   // 官方标题可能很长（如「听过的某某的人也在听」），允许折成两行。
                   maxLines: 2,
                   trailing: Row(
@@ -321,11 +318,140 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
                   height: _rowHeight * _perColumn,
                   child: _body(snap, items, columns, fraction),
                 ),
+                if (radar.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  _SectionTitle(snap.data!.radarTitle, maxLines: 2),
+                  const SizedBox(height: 12),
+                  _RadarPlaylists(playlists: radar, narrow: narrow),
+                ],
               ],
             );
           },
         );
       },
+    );
+  }
+}
+
+/// 雷达歌单：横向滚动的大封面卡片，左上角播放量，右下角播放键，下面两行标题。
+class _RadarPlaylists extends StatelessWidget {
+  const _RadarPlaylists({required this.playlists, required this.narrow});
+
+  final List<Playlist> playlists;
+  final bool narrow;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = narrow ? 150.0 : 180.0;
+    const titleHeight = 8 + 15 * 1.4 * 2 + 6;
+    return SizedBox(
+      height: width + titleHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: playlists.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, i) => SizedBox(
+          width: width,
+          child: _RadarCard(playlist: playlists[i]),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadarCard extends StatelessWidget {
+  const _RadarCard({required this.playlist});
+
+  final Playlist playlist;
+
+  Future<void> _play(BuildContext context) async {
+    final api = AppScope.of(context).api;
+    final player = PlayerScope.read(context);
+    try {
+      final detail = await api.playlistDetail(playlist.id);
+      if (detail.tracks.isEmpty) return AppScope.toast('歌单是空的');
+      await player.playQueue(detail.tracks, title: playlist.name, sourceId: playlist.id);
+    } catch (e) {
+      AppScope.toast('歌单加载失败：$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = playlist;
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      onTap: () =>
+          Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: p))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              CoverArt(
+                palette: p.palette,
+                seed: p.id,
+                imageUrl: p.coverUrl,
+                radius: AppRadius.card,
+              ),
+              // 上下各垫一层渐变，保证白字可读。
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.all(Radius.circular(AppRadius.card)),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0x55000000),
+                        Color(0x00000000),
+                        Color(0x00000000),
+                        Color(0x44000000),
+                      ],
+                      stops: [0, 0.3, 0.7, 1],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 8,
+                top: 6,
+                child: Row(
+                  children: [
+                    const Icon(Icons.headphones_rounded, size: 14, color: Colors.white),
+                    const SizedBox(width: 3),
+                    Text(
+                      formatPlayCount(p.playCount),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: 2,
+                bottom: 2,
+                child: IconButton(
+                  tooltip: '播放',
+                  onPressed: () => _play(context),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 30, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            p.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 15, height: 1.4, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
     );
   }
 }
