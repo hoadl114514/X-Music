@@ -498,7 +498,9 @@ class _OutputTiles extends StatelessWidget {
     final settings = AppScope.of(context).settings;
     final result = await PlayerScope.read(context).applyOutput();
     if (result == null) return;
-    if (settings.usbExclusive && result.exclusive != ExclusiveState.on) {
+    if (result.bitDepth != settings.outputBitDepth.bits) {
+      AppScope.toast('24 位输出需要 Android 12 及以上，已按 16 位输出');
+    } else if (settings.usbExclusive && result.exclusive != ExclusiveState.on) {
       AppScope.toast(result.exclusive.message);
     } else if (!result.deviceFound) {
       AppScope.toast('没找到这个输出设备，先交给系统选择');
@@ -555,7 +557,8 @@ class _OutputTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = AppScope.of(context).settings;
-    final float = settings.outputBitDepth.float;
+    final depth = settings.outputBitDepth;
+    final fixedRate = depth.followsSourceRate;
     return Column(
       children: [
         ListTile(
@@ -568,7 +571,11 @@ class _OutputTiles extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.graphic_eq_rounded),
           title: const Text('输出位深'),
-          subtitle: const Text('32 位浮点只对 24 位以上的音源生效'),
+          subtitle: Text(switch (depth) {
+            OutputBitDepth.pcm16 => '高解析音源会降到 16 位',
+            OutputBitDepth.pcm24 => '无损和高解析音源按 24 位输出（Android 12+）',
+            OutputBitDepth.float32 => '只对 24 位以上的音源生效',
+          }),
           trailing: DropdownButton<OutputBitDepth>(
             value: settings.outputBitDepth,
             underline: const SizedBox.shrink(),
@@ -586,12 +593,12 @@ class _OutputTiles extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.waves_rounded),
           title: const Text('输出采样率'),
-          subtitle: Text(float ? '32 位浮点输出时跟随音源' : '不跟随音源时由播放器重采样'),
-          enabled: !float,
+          subtitle: Text(fixedRate ? '${depth.label}输出时跟随音源' : '不跟随音源时由播放器重采样'),
+          enabled: !fixedRate,
           trailing: DropdownButton<int>(
-            value: float ? 0 : settings.outputSampleRate,
+            value: fixedRate ? 0 : settings.outputSampleRate,
             underline: const SizedBox.shrink(),
-            onChanged: float
+            onChanged: fixedRate
                 ? null
                 : (v) {
                     if (v == null) return;

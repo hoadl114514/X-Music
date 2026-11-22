@@ -17,7 +17,7 @@ import io.flutter.plugin.common.MethodChannel
  * 音频输出设置：列出输出设备、指定输出设备、位深、采样率、USB DAC 独占（bit-perfect），
  * 以及判断当前是不是移动网络。
  *
- * 位深和采样率写进改过的 just_audio（[OutputConfig]），下次建播放器时生效；
+ * 位深（16 位、24 位整数、32 位浮点）和采样率写进改过的 just_audio（[OutputConfig]），下次建播放器时生效；
  * 输出设备立即生效；USB 独占用 Android 14 的 setPreferredMixerAttributes。
  */
 class AudioOutputChannel(private val context: Context, messenger: BinaryMessenger) {
@@ -40,7 +40,7 @@ class AudioOutputChannel(private val context: Context, messenger: BinaryMessenge
                     apply(
                         deviceType = call.argument<Int>("deviceType") ?: 0,
                         deviceName = call.argument<String>("deviceName") ?: "",
-                        floatOutput = call.argument<Boolean>("floatOutput") ?: false,
+                        bitDepth = call.argument<Int>("bitDepth") ?: 16,
                         sampleRate = call.argument<Int>("sampleRate") ?: 0,
                         usbExclusive = call.argument<Boolean>("usbExclusive") ?: false,
                     ),
@@ -67,12 +67,17 @@ class AudioOutputChannel(private val context: Context, messenger: BinaryMessenge
     private fun apply(
         deviceType: Int,
         deviceName: String,
-        floatOutput: Boolean,
+        bitDepth: Int,
         sampleRate: Int,
         usbExclusive: Boolean,
     ): Map<String, Any?> {
-        OutputConfig.floatOutput = floatOutput
-        OutputConfig.sampleRate = sampleRate
+        // 24 位整数输出要 Android 12（AudioTrack 的 24 位 packed）。不支持时退回 16 位。
+        val int24 = bitDepth == 24 && Build.VERSION.SDK_INT >= 31
+        OutputConfig.floatOutput = bitDepth == 32
+        OutputConfig.int24Output = int24
+        // 24 位和浮点都不重采样，跟随音源。
+        OutputConfig.sampleRate = if (bitDepth == 16) sampleRate else 0
+        val effectiveDepth = if (bitDepth == 24 && !int24) 16 else bitDepth
 
         val all = outputs()
         var device = if (deviceType == 0) null else
@@ -88,7 +93,7 @@ class AudioOutputChannel(private val context: Context, messenger: BinaryMessenge
             exclusive = when {
                 Build.VERSION.SDK_INT < 34 -> "unsupported_os"
                 usb == null -> "no_usb"
-                else -> setExclusive(usb, floatOutput, sampleRate)
+                else -> setExclusive(usb, effectiveDepth, OutputConfig.sampleRate)
             }
             if (exclusive == "on") {
                 exclusiveDevice = usb
@@ -96,16 +101,24 @@ class AudioOutputChannel(private val context: Context, messenger: BinaryMessenge
             }
         }
         OutputConfig.setPreferredDevice(device)
-        return mapOf("exclusive" to exclusive, "deviceFound" to (deviceType == 0 || device != null))
+        return mapOf(
+            "exclusive" to exclusive,
+            "deviceFound" to (deviceType == 0 || device != null),
+            "bitDepth" to effectiveDepth,
+        )
     }
 
-    private fun setExclusive(usb: AudioDeviceInfo, floatOutput: Boolean, sampleRate: Int): String {
+    private fun setExclusive(usb: AudioDeviceInfo, bitDepth: Int, sampleRate: Int): String {
         if (Build.VERSION.SDK_INT < 34) return "unsupported_os"
         val candidates = audio.getSupportedMixerAttributes(usb).filter {
             it.mixerBehavior == AudioMixerAttributes.MIXER_BEHAVIOR_BIT_PERFECT
         }
         if (candidates.isEmpty()) return "unsupported_device"
-        val encoding = if (floatOutput) AudioFormat.ENCODING_PCM_FLOAT else AudioFormat.ENCODING_PCM_16BIT
+        val encoding = when (bitDepth) {
+            32 -> AudioFormat.ENCODING_PCM_FLOAT
+            24 -> AudioFormat.ENCODING_PCM_24BIT_PACKED
+            else -> AudioFormat.ENCODING_PCM_16BIT
+        }
         // 跟随音源时按 44.1 kHz 设：网易云的歌绝大多数是 44.1 kHz。
         val rate = if (sampleRate > 0) sampleRate else 44100
         fun score(m: AudioMixerAttributes): Int {

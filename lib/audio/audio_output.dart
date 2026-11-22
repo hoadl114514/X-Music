@@ -35,13 +35,17 @@ class AudioOutputDevice {
 
 /// 输出位深。
 enum OutputBitDepth {
-  pcm16('16 位', false),
-  float32('32 位浮点', true);
+  pcm16('16 位', 16),
+  pcm24('24 位', 24),
+  float32('32 位浮点', 32);
 
-  const OutputBitDepth(this.label, this.float);
+  const OutputBitDepth(this.label, this.bits);
 
   final String label;
-  final bool float;
+  final int bits;
+
+  /// 16 位以外都不重采样，采样率跟随音源。
+  bool get followsSourceRate => this != pcm16;
 
   static OutputBitDepth byName(String? name) =>
       values.firstWhere((v) => v.name == name, orElse: () => pcm16);
@@ -70,8 +74,8 @@ enum ExclusiveState {
   };
 }
 
-/// 一次应用输出设置的结果。
-typedef OutputResult = ({ExclusiveState exclusive, bool deviceFound});
+/// 一次应用输出设置的结果。[bitDepth] 是实际生效的位深（系统不支持 24 位时退回 16 位）。
+typedef OutputResult = ({ExclusiveState exclusive, bool deviceFound, int bitDepth});
 
 /// 音频输出的原生接口：输出设备、位深、采样率、USB 独占，以及当前网络类型。
 ///
@@ -123,18 +127,19 @@ class AudioOutput {
       final r = await _channel.invokeMapMethod<String, Object?>('apply', {
         'deviceType': device?.type ?? 0,
         'deviceName': device?.name ?? '',
-        'floatOutput': bitDepth.float,
+        'bitDepth': bitDepth.bits,
         'sampleRate': sampleRate,
         'usbExclusive': usbExclusive,
       });
       return (
         exclusive: ExclusiveState.parse(r?['exclusive']),
         deviceFound: r?['deviceFound'] != false,
+        bitDepth: (r?['bitDepth'] as int?) ?? bitDepth.bits,
       );
     } on MissingPluginException {
-      return (exclusive: ExclusiveState.off, deviceFound: true);
+      return (exclusive: ExclusiveState.off, deviceFound: true, bitDepth: bitDepth.bits);
     } on PlatformException {
-      return (exclusive: ExclusiveState.failed, deviceFound: true);
+      return (exclusive: ExclusiveState.failed, deviceFound: true, bitDepth: bitDepth.bits);
     }
   }
 }

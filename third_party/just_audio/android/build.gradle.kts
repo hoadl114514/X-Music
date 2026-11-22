@@ -45,6 +45,8 @@ android {
 
     defaultConfig {
         minSdk = 16
+        // X-Music：HiResAudioSink 的反射字段要保留。
+        consumerProguardFiles("proguard-rules.pro")
     }
 
     compileOptions {

@@ -29,7 +29,11 @@ class FakeOutput extends AudioOutput {
     required bool usbExclusive,
   }) async {
     applied.add((device: device, bitDepth: bitDepth, sampleRate: sampleRate, usb: usbExclusive));
-    return (exclusive: usbExclusive ? ExclusiveState.on : ExclusiveState.off, deviceFound: true);
+    return (
+      exclusive: usbExclusive ? ExclusiveState.on : ExclusiveState.off,
+      deviceFound: true,
+      bitDepth: bitDepth.bits,
+    );
   }
 }
 
@@ -108,9 +112,10 @@ void main() {
     expect(engine.rebuilds, 0);
     expect(output.applied.last.device?.name, 'DAC');
 
-    settings.outputBitDepth = OutputBitDepth.float32;
+    settings.outputBitDepth = OutputBitDepth.pcm24;
     await player.applyOutput();
     expect(engine.rebuilds, 1);
+    expect(output.applied.last.bitDepth.bits, 24);
     expect(engine.loaded.length, loads + 1);
     expect(engine.loadStart, const Duration(seconds: 30));
     expect(engine.playing, isFalse);
