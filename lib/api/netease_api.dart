@@ -1439,6 +1439,10 @@ class NeteaseApi {
       description: _str(raw['updateFrequency']) ?? _str('${raw['description'] ?? ''}'.trim()),
       subscribed: raw['subscribed'] == true,
       isLikedList: _int(raw['specialType']) == 5,
+      // 共建歌单：字段名没有公开文档，几个可能的都认（普通歌单的 sharedUsers 是 null）。
+      shared:
+          raw['sharedUsers'] is List || raw['playlistType'] == 'SHARED' || raw['type'] == 'SHARED',
+      sharedUsers: [for (final u in _list(raw['sharedUsers'])) ?parseSocialUser(u)],
     );
   }
 

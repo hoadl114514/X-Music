@@ -7,6 +7,8 @@ import '../../state/account_controller.dart';
 import '../music/nav.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/playlist_card.dart';
+import '../../widgets/retry_image.dart';
+import '../../widgets/share.dart';
 import 'track_list_view.dart';
 
 /// 歌单内容：头部信息 + 播放全部 + 歌曲列表。歌单页和「我喜欢」共用。
@@ -55,6 +57,7 @@ class PlaylistView extends StatelessWidget {
           ].join(' · '),
           ?p.description,
         ],
+        extra: account.isShared(p) ? _InviteRow(playlist: p) : null,
         onPlayAll: playAll,
         actions: [_SubscribeButton(playlist: p)],
       ),
@@ -102,6 +105,101 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
         side: BorderSide(color: context.colors.outline),
+      ),
+    );
+  }
+}
+
+/// 共建歌单标题下的「邀请好友」：成员头像叠在一起，后面一个「+」，点了分享邀请。
+class _InviteRow extends StatelessWidget {
+  const _InviteRow({required this.playlist});
+
+  final Playlist playlist;
+
+  static const _size = 28.0;
+  static const _step = 18.0;
+
+  void _invite() {
+    final p = playlist;
+    shareText(
+      '我建了一个共建歌单「${p.name}」，来和我一起加歌吧：https://music.163.com/playlist?id=${p.id}',
+      subject: '共建歌单',
+      title: '邀请好友一起编辑歌单',
+      copied: '已复制邀请链接',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final account = AccountScope.of(context);
+    final me = account.profile;
+    // 创建者在最前：自己的歌单用自己的头像，其他成员跟在后面。
+    final members = [
+      if (me != null && account.isOwn(playlist))
+        (name: me.nickname, url: me.avatarUrl)
+      else if (playlist.creator case final c?)
+        (name: c, url: null),
+      for (final u in playlist.sharedUsers) (name: u.nickname, url: u.avatarUrl),
+    ].take(4).toList();
+    Widget circle(Widget child, {Color? color}) => Container(
+      width: _size,
+      height: _size,
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(color: scheme.surface, shape: BoxShape.circle),
+      child: CircleAvatar(backgroundColor: color ?? scheme.secondaryContainer, child: child),
+    );
+    final count = members.length + 1;
+    return InkWell(
+      onTap: _invite,
+      borderRadius: BorderRadius.circular(_size),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: _size + _step * (count - 1),
+              height: _size,
+              child: Stack(
+                children: [
+                  for (final (i, m) in members.indexed)
+                    Positioned(
+                      left: _step * i,
+                      child: circle(
+                        m.url == null
+                            ? Text(
+                                m.name.isEmpty ? '?' : m.name.characters.first,
+                                style: TextStyle(fontSize: 11, color: scheme.onSecondaryContainer),
+                              )
+                            : ClipOval(
+                                child: Image(
+                                  image: retryImage(m.url!),
+                                  width: _size,
+                                  height: _size,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                      ),
+                    ),
+                  Positioned(
+                    left: _step * members.length,
+                    child: circle(
+                      Icon(Icons.add_rounded, size: 16, color: scheme.onSurfaceVariant),
+                      color: scheme.surfaceContainerHighest,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '邀请好友',
+              style: Theme.of(context).textTheme.titleSmall
+                  ?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -125,6 +125,8 @@ class Playlist {
     this.description,
     this.subscribed = false,
     this.isLikedList = false,
+    this.shared = false,
+    this.sharedUsers = const [],
     this._palette,
   });
 
@@ -144,6 +146,12 @@ class Playlist {
 
   /// 账号的「我喜欢的音乐」。
   final bool isLikedList;
+
+  /// 共建歌单（创建时 type 为 SHARED，好友可以一起加歌）。
+  final bool shared;
+
+  /// 共建歌单里除创建者以外的成员。接口没给时为空。
+  final List<SocialUser> sharedUsers;
   final List<Color>? _palette;
 
   List<Color> get palette => _palette ?? fallbackPalette(id);
@@ -162,6 +170,8 @@ class Playlist {
           description: description,
           subscribed: subscribed,
           isLikedList: isLikedList,
+          shared: shared,
+          sharedUsers: sharedUsers,
           palette: _palette,
         );
 }

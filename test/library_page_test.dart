@@ -52,6 +52,15 @@ void main() {
               'trackCount': 7,
               'creator': {'userId': 1, 'nickname': '我'},
             },
+            {
+              'id': 43,
+              'name': '一起建的歌',
+              'trackCount': 12,
+              'creator': {'userId': 1, 'nickname': '我'},
+              'sharedUsers': [
+                {'userId': 5, 'nickname': '好友'},
+              ],
+            },
             if (!unsubscribed)
               {
                 'id': 99,
@@ -104,7 +113,7 @@ void main() {
     expect(find.text('收藏的歌单'), findsOneWidget);
     expect(find.text('别人的歌单'), findsOneWidget);
     // 「我喜欢」只在顶部卡片里，不重复出现在创建的歌单里。
-    expect(find.text('2'), findsNothing);
+    expect(find.text('3'), findsNothing);
 
     // 自建歌单的管理菜单。
     await tester.tap(find.byTooltip('管理歌单').first);
@@ -125,5 +134,20 @@ void main() {
     expect(paths.any((p) => p.endsWith('/playlist/unsubscribe')), isTrue);
     expect(find.text('别人的歌单'), findsNothing);
     expect(find.text('还没有收藏歌单'), findsOneWidget);
+  });
+
+  testWidgets('a shared playlist shows invite friends under its name; a normal one does not', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('一起建的歌'));
+    await tester.pumpAndSettle();
+    expect(find.text('邀请好友'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('自建歌单'));
+    await tester.pumpAndSettle();
+    expect(find.text('邀请好友'), findsNothing);
   });
 }

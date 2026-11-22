@@ -38,6 +38,7 @@ class AppSettings extends ChangeNotifier {
   static const _kOutputBitDepth = 'output_bit_depth';
   static const _kOutputSampleRate = 'output_sample_rate';
   static const _kUsbExclusive = 'usb_exclusive';
+  static const _kSharedPlaylists = 'shared_playlists';
 
   /// 搜索历史最多保留几条。
   static const searchHistoryLimit = 20;
@@ -85,6 +86,12 @@ class AppSettings extends ChangeNotifier {
   /// 输出采样率；0 表示跟随音源。
   int get outputSampleRate => _prefs.getInt(_kOutputSampleRate) ?? 0;
   set outputSampleRate(int v) => _set(() => _prefs.setInt(_kOutputSampleRate, v));
+
+  /// 在本机建的共建歌单 id。接口不一定标出共建歌单，自己建的先记下来。
+  Set<String> get sharedPlaylistIds => {...?_prefs.getStringList(_kSharedPlaylists)};
+
+  void addSharedPlaylist(String id) =>
+      _set(() => _prefs.setStringList(_kSharedPlaylists, [...sharedPlaylistIds, id]));
 
   /// USB DAC 独占（bit-perfect）。
   bool get usbExclusive => _prefs.getBool(_kUsbExclusive) ?? false;

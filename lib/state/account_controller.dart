@@ -64,6 +64,7 @@ class AccountController extends ChangeNotifier {
   Future<Playlist?> createPlaylist(String name, {bool private = false, bool shared = false}) async {
     if (!isLoggedIn) throw const ApiException('登录后才能新建歌单', code: 301);
     final created = await _api.createPlaylist(name, private: private, shared: shared);
+    if (shared && created != null) _settings.addSharedPlaylist(created.id);
     await _reloadPlaylists();
     return _find(created?.id) ?? created;
   }
@@ -129,6 +130,9 @@ class AccountController extends ChangeNotifier {
   }
 
   /// 能删歌的歌单：自己创建的和「我喜欢的音乐」。
+  /// 是不是共建歌单：接口标了，或者是在本机建的共建歌单。
+  bool isShared(Playlist p) => p.shared || _settings.sharedPlaylistIds.contains(p.id);
+
   bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id;
 
   /// 启动时用保存的 Cookie 恢复登录。网络失败时保留 Cookie，下次再试。

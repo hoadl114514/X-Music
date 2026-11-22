@@ -459,6 +459,7 @@ class CollectionHeader extends StatelessWidget {
     this.actions = const [],
     this.circular = false,
     this.link,
+    this.extra,
   });
 
   final String title;
@@ -480,6 +481,9 @@ class CollectionHeader extends StatelessWidget {
 
   /// 标题下面一行可以点的文字，例如歌单创建者（点了进用户主页）。
   final ({String text, VoidCallback onTap})? link;
+
+  /// 标题和创建者下面额外的一行，例如共建歌单的「邀请好友」。
+  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
@@ -539,6 +543,7 @@ class CollectionHeader extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (extra case final e?) ...[const SizedBox(height: 8), e],
                 for (final l in lines) ...[
                   const SizedBox(height: 4),
                   Text(
