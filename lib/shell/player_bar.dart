@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/backdrop_color.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/like_button.dart';
+import '../widgets/motion.dart';
 import '../widgets/round_icon_button.dart';
 
 /// 底部迷你播放条，参考 Spotify：悬浮圆角卡片，底色取自封面，底边是一条细进度线。
@@ -31,59 +32,68 @@ class PlayerBar extends StatelessWidget {
     // 用封面主色做种子生成一套 M3 配色，卡片取它的 primaryContainer，浅色 / 深色都协调。
     final cover = coverScheme(backdropColorFor(player.palette), Theme.of(context).brightness);
     final fg = cover.onPrimaryContainer;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
-        height: height,
-        decoration: BoxDecoration(
-          color: cover.primaryContainer,
-          borderRadius: BorderRadius.circular(AppRadius.panel),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          // 撑满卡片高度，歌曲信息和按钮在卡片里垂直居中。
-          fit: StackFit.expand,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 8, right: 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SwipeToSkip(
-                      current: song,
-                      previous: player.peekPrevious,
-                      next: player.peekNext,
-                      onPrevious: () => player.previous(restart: false),
-                      onNext: player.next,
-                      onTap: () => openNowPlaying(context),
+    // 开始放歌时播放条从下方滑入。
+    return Entrance(
+      index: 0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          height: height,
+          decoration: BoxDecoration(
+            color: cover.primaryContainer,
+            borderRadius: BorderRadius.circular(AppRadius.panel),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            // 撑满卡片高度，歌曲信息和按钮在卡片里垂直居中。
+            fit: StackFit.expand,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 8, right: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _SwipeToSkip(
+                        current: song,
+                        previous: player.peekPrevious,
+                        next: player.peekNext,
+                        onPrevious: () => player.previous(restart: false),
+                        onNext: player.next,
+                        onTap: () => openNowPlaying(context),
+                        color: fg,
+                      ),
+                    ),
+                    RoundIconButton(
+                      icon: Icons.lyrics_outlined,
+                      onPressed: () => openNowPlaying(context, showLyrics: true),
+                      tooltip: '歌词',
+                      size: 40,
+                      iconSize: 22,
                       color: fg,
                     ),
-                  ),
-                  RoundIconButton(
-                    icon: Icons.lyrics_outlined,
-                    onPressed: () => openNowPlaying(context, showLyrics: true),
-                    tooltip: '歌词',
-                    size: 40,
-                    iconSize: 22,
-                    color: fg,
-                  ),
-                  LikeButton(songId: song.id, color: fg),
-                  RoundIconButton(
-                    icon: player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    onPressed: player.toggle,
-                    tooltip: player.isPlaying ? '暂停' : '播放',
-                    size: 44,
-                    iconSize: 28,
-                    filled: true,
-                    background: cover.primary,
-                    color: cover.onPrimary,
-                  ),
-                ],
+                    LikeButton(songId: song.id, color: fg),
+                    RoundIconButton(
+                      icon: player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      onPressed: player.toggle,
+                      tooltip: player.isPlaying ? '暂停' : '播放',
+                      size: 44,
+                      iconSize: 28,
+                      filled: true,
+                      background: cover.primary,
+                      color: cover.onPrimary,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            Positioned(left: 16, right: 16, bottom: 0, child: _ProgressLine(color: cover.primary)),
-          ],
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 0,
+                child: _ProgressLine(color: cover.primary),
+              ),
+            ],
+          ),
         ),
       ),
     );

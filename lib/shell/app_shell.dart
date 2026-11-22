@@ -13,6 +13,7 @@ import '../pages/music/recent_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/social/follow_page.dart';
 import '../state/player_controller.dart';
+import '../widgets/motion.dart';
 import 'app_drawer.dart';
 import 'destinations.dart';
 import 'page_visit.dart';
@@ -106,19 +107,23 @@ class _AppShellState extends State<AppShell> {
               const TopBar(),
               Expanded(
                 // 没显示的页面留在后台（动画暂停），只建进过的。
-                child: IndexedStack(
-                  index: _current.index,
-                  children: [
-                    for (final d in Destination.values)
-                      _visited.contains(d)
-                          ? KeyedSubtree(
-                              key: ValueKey(d),
-                              child: Destination.refreshOnVisit.contains(d)
-                                  ? PageVisit(count: _visits[d] ?? 0, child: _page(d))
-                                  : _page(d),
-                            )
-                          : const SizedBox.shrink(),
-                  ],
+                // 切标签时新页面淡入并轻微放大（M3 fade through）。
+                child: FadeThrough(
+                  trigger: _current,
+                  child: IndexedStack(
+                    index: _current.index,
+                    children: [
+                      for (final d in Destination.values)
+                        _visited.contains(d)
+                            ? KeyedSubtree(
+                                key: ValueKey(d),
+                                child: Destination.refreshOnVisit.contains(d)
+                                    ? PageVisit(count: _visits[d] ?? 0, child: _page(d))
+                                    : _page(d),
+                              )
+                            : const SizedBox.shrink(),
+                    ],
+                  ),
                 ),
               ),
             ],

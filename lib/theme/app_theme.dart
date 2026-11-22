@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// 界面用到的颜色角色，按 Material 3 的配色方案生成。
@@ -360,6 +361,14 @@ abstract final class AppTheme {
         thumbColor: WidgetStatePropertyAll(scheme.onSurface.withValues(alpha: 0.24)),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: scheme.primary),
+      // M3 页面转场：安卓用新的渐进式转场（新页从右侧滑入并淡入，旧页同步淡出）。
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
     );
   }
 

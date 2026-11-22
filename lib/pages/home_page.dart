@@ -8,6 +8,7 @@ import '../state/account_controller.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cover_art.dart';
+import '../widgets/motion.dart';
 import '../widgets/playlist_card.dart';
 import 'library/library_page.dart';
 import 'library/song_actions.dart';
@@ -40,58 +41,66 @@ class HomePage extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 0),
             sliver: SliverList.list(
               children: [
-                const _Greeting(),
+                // 首屏逐块入场：问候语、快捷卡片、推荐依次从下方滑上来。
+                const Entrance(index: 0, child: _Greeting()),
                 const SizedBox(height: 24),
-                LayoutBuilder(
-                  builder: (context, c) {
-                    final shortcuts = Column(
-                      children: [
-                        _DailyCard(key: ValueKey(account.profile?.userId)),
-                        const SizedBox(height: 16),
-                        _ShortcutCard(
-                          title: '我喜欢的音乐',
-                          subtitle: account.isLoggedIn
-                              ? '${account.likedPlaylist?.trackCount ?? 0} 首'
-                              : '登录后查看',
-                          icon: Icons.favorite_rounded,
-                          palette: _likedPalette,
-                          seed: 'liked',
-                          // 「我喜欢」歌单的封面就是最近喜欢的第一首歌的封面。
-                          imageUrl: account.likedPlaylist?.coverUrl,
-                          fallbackImage: switch (account.likedPlaylist) {
-                            final p? => playlistCoverFallback(context, p),
-                            null => null,
-                          },
-                          onTap: () => switch (account.likedPlaylist) {
-                            final p? => LibraryPage.openLiked(context, p),
-                            null =>
-                              account.isLoggedIn
-                                  ? onNavigate(Destination.library)
-                                  : LoginPage.open(context),
-                          },
-                        ),
-                      ],
-                    );
-                    if (c.maxWidth < 760) {
-                      return Column(
-                        children: [shortcuts, const SizedBox(height: 16), const _PersonalFmCard()],
-                      );
-                    }
-                    return IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                Entrance(
+                  index: 1,
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final shortcuts = Column(
                         children: [
-                          Expanded(child: shortcuts),
-                          const SizedBox(width: 20),
-                          const Expanded(child: _PersonalFmCard()),
+                          _DailyCard(key: ValueKey(account.profile?.userId)),
+                          const SizedBox(height: 16),
+                          _ShortcutCard(
+                            title: '我喜欢的音乐',
+                            subtitle: account.isLoggedIn
+                                ? '${account.likedPlaylist?.trackCount ?? 0} 首'
+                                : '登录后查看',
+                            icon: Icons.favorite_rounded,
+                            palette: _likedPalette,
+                            seed: 'liked',
+                            // 「我喜欢」歌单的封面就是最近喜欢的第一首歌的封面。
+                            imageUrl: account.likedPlaylist?.coverUrl,
+                            fallbackImage: switch (account.likedPlaylist) {
+                              final p? => playlistCoverFallback(context, p),
+                              null => null,
+                            },
+                            onTap: () => switch (account.likedPlaylist) {
+                              final p? => LibraryPage.openLiked(context, p),
+                              null =>
+                                account.isLoggedIn
+                                    ? onNavigate(Destination.library)
+                                    : LoginPage.open(context),
+                            },
+                          ),
                         ],
-                      ),
-                    );
-                  },
+                      );
+                      if (c.maxWidth < 760) {
+                        return Column(
+                          children: [
+                            shortcuts,
+                            const SizedBox(height: 16),
+                            const _PersonalFmCard(),
+                          ],
+                        );
+                      }
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: shortcuts),
+                            const SizedBox(width: 20),
+                            const Expanded(child: _PersonalFmCard()),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 32),
                 // 登录状态变了（换号、退出）就重新拉推荐。
-                _SongRcmdSection(key: ValueKey(account.profile?.userId)),
+                Entrance(index: 2, child: _SongRcmdSection(key: ValueKey(account.profile?.userId))),
               ],
             ),
           ),
@@ -649,14 +658,16 @@ class _Panel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: color ?? context.scheme.surfaceContainerHighest,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(padding: padding, child: child),
+    return PressScale(
+      child: Card(
+        color: color ?? context.scheme.surfaceContainerHighest,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(padding: padding, child: child),
+        ),
       ),
     );
   }
