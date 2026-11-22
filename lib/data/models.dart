@@ -830,3 +830,45 @@ class ListenTogetherStatus {
   final int creatorId;
   final List<SocialUser> users;
 }
+
+/// 一起听房间的最后一条播放指令。
+class ListenTogetherCommand {
+  const ListenTogetherCommand({
+    required this.songId,
+    required this.playing,
+    required this.progress,
+    required this.serverTime,
+    required this.clientSeq,
+    required this.userId,
+  });
+
+  final String songId;
+  final bool playing;
+
+  /// 发指令时的进度。
+  final Duration progress;
+
+  /// 服务器收到指令的时间（毫秒时间戳，接口字段 serverSeq）。不像时间戳时为 0。
+  final int serverTime;
+  final int clientSeq;
+  final int userId;
+
+  /// 按 [now] 推算的当前进度：暂停时就是 [progress]；播放时加上服务器收到指令后过去的时间。
+  /// 服务器时间不可信（缺失或和本机差太多）时，从 [receivedAt]（本机拿到快照的时间）算起。
+  Duration positionAt(DateTime now, {required DateTime receivedAt}) {
+    if (!playing) return progress;
+    final nowMs = now.millisecondsSinceEpoch;
+    final trusted = serverTime > 1000000000000 && (nowMs - serverTime).abs() < 600000;
+    final from = trusted ? serverTime : receivedAt.millisecondsSinceEpoch;
+    final elapsed = nowMs - from;
+    return progress + Duration(milliseconds: elapsed < 0 ? 0 : elapsed);
+  }
+}
+
+/// 一起听房间的快照：播放列表和最后一条指令（没有时为 null）。
+class ListenTogetherSnapshot {
+  const ListenTogetherSnapshot({required this.songIds, this.command});
+
+  final List<String> songIds;
+  final ListenTogetherCommand? command;
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
@@ -7,12 +8,15 @@ import '../data/models.dart';
 import 'account_controller.dart';
 import 'player_controller.dart';
 
-/// 一起听。
+/// 一起听。房主和加入方用同一套逻辑，谁操作都会同步给对方：
 ///
-/// - 自己开房间（房主）：把当前播放列表、切歌、播放 / 暂停、拖进度上报给房间，并定时发心跳。
-///   好友用官方客户端打开邀请链接加入，就会跟着房主的进度听。
-/// - 加入别人的房间：接受邀请后取房间的播放列表开始播放，之后定时刷新列表和成员。
-///   公开接口拿不到房主的实时进度，所以加入方只能同步歌单，不能同步到秒。
+/// - 本地切歌、播放 / 暂停、拖进度、换列表时上报指令（带递增的 clientSeq），并定时发心跳；
+/// - 每 [pollEvery] 拉一次房间快照（`sync/playlist/get`），里面有房间的歌单和最后一条播放指令。
+///   指令不是自己发的，就照着换列表、切歌、跳进度、播放 / 暂停。
+///   进度按「指令里的进度 + 服务器收到指令后过去的时间」推算，见 [ListenTogetherCommand.positionAt]。
+///
+/// 做法参考开源项目 Enji（together.rs）、MeloX-Android 和 YTPlayer 的快照轮询实现。
+/// 好友用官方客户端也能加入：官方客户端走长连接，我们走轮询，两边读写的是同一个房间状态。
 class ListenTogether extends ChangeNotifier {
   ListenTogether({required this.api, required this.player, required this.account});
 
@@ -20,23 +24,50 @@ class ListenTogether extends ChangeNotifier {
   final PlayerController player;
   final AccountController account;
 
-  /// 心跳间隔。
-  static const heartbeatEvery = Duration(seconds: 15);
+  /// 拉房间快照的间隔。
+  static const pollEvery = Duration(seconds: 2);
 
-  /// 刷新房间成员（和加入方刷新歌单）的间隔。
-  static const refreshEvery = Duration(seconds: 10);
+  /// 心跳间隔。
+  static const heartbeatEvery = Duration(seconds: 20);
+
+  /// 刷新房间成员的间隔。
+  static const membersEvery = Duration(seconds: 10);
+
+  /// 进度差超过这么多才跳，免得每次轮询都抖一下。
+  static const seekThreshold = Duration(milliseconds: 1500);
+
+  /// 照着房间指令操作播放器后，这段时间内播放器的变化不再上报，避免来回反弹。
+  static const _echoWindow = Duration(seconds: 2);
 
   String? _roomId;
   String? _inviterId;
   bool _host = false;
   bool _busy = false;
   List<SocialUser> _users = const [];
+  Timer? _poll;
   Timer? _heartbeat;
-  Timer? _refresh;
+  Timer? _members;
+  bool _polling = false;
+  int _failures = 0;
+
+  /// 进房间的时间和连续几次查到「不在房间」。刚进房间时状态接口可能还没更新，
+  /// 所以过了 [_grace] 且连续两次不在房间才认为房间结束了。
+  DateTime _enteredAt = DateTime.now();
+  int _absent = 0;
+  static const _grace = Duration(seconds: 15);
+
+  /// 自己发过的指令序号（最近 64 条），用来认出快照里哪条是自己的。
+  final _sent = Queue<int>();
   int _seq = 0;
   int _version = 0;
 
-  /// 上次上报时的状态，用来判断这次播放器变化要不要上报。
+  /// 最近处理过的远端指令，避免重复应用。
+  (int, int, int)? _seen;
+  ListenTogetherCommand? _remote;
+  DateTime _remoteAt = DateTime.now();
+  DateTime _suppressUntil = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 上次上报 / 应用时的状态，用来判断这次播放器变化要不要上报。
   String? _lastSongId;
   bool? _lastPlaying;
   List<String> _lastQueue = const [];
@@ -49,6 +80,9 @@ class ListenTogether extends ChangeNotifier {
   /// 自己是不是房主。
   bool get isHost => _host;
   bool get busy => _busy;
+
+  /// 连续几次拉不到房间状态：页面上提示连接不稳。
+  bool get struggling => _failures > 1;
 
   /// 房间里的人（包括自己）。
   List<SocialUser> get users => _users;
@@ -79,10 +113,10 @@ class ListenTogether extends ChangeNotifier {
     await api.listenTogetherCheck(id);
     _enter(id, host: true, inviterId: '${account.profile!.userId}');
     await _reportQueue(force: true);
-    await _reportPlayback(command: 'GOTO');
+    await _report('GOTO');
   });
 
-  /// 用邀请链接加入别人的房间，取房间的播放列表开始放。
+  /// 用邀请链接加入别人的房间：拉一次快照，跟上房间正在放的歌和进度。
   Future<void> join(String link) => _guard(() async {
     _requireLogin();
     final parsed = parseLink(link);
@@ -92,10 +126,10 @@ class ListenTogether extends ChangeNotifier {
     }
     await api.listenTogetherAccept(parsed.roomId, parsed.inviterId);
     _enter(parsed.roomId, host: false, inviterId: parsed.inviterId);
-    await _pullQueue(play: true);
+    await _pull();
   });
 
-  /// 退出房间。房主退出会结束整个房间。
+  /// 退出房间。任一方结束，整个房间就结束了。
   Future<void> leave() => _guard(() async {
     final id = _roomId;
     _exit();
@@ -124,24 +158,30 @@ class ListenTogether extends ChangeNotifier {
     _inviterId = inviterId;
     _seq = 0;
     _version = 0;
-    _lastSongId = null;
-    _lastPlaying = null;
+    _sent.clear();
+    _seen = null;
+    _remote = null;
+    _failures = 0;
+    _absent = 0;
+    _enteredAt = DateTime.now();
+    _lastSongId = player.current?.id;
+    _lastPlaying = player.isPlaying;
     _lastQueue = const [];
     _users = [?_me];
-    if (host) {
-      player.addListener(_onPlayer);
-      _heartbeat = Timer.periodic(heartbeatEvery, (_) => _sendHeartbeat());
-    }
-    _refresh = Timer.periodic(refreshEvery, (_) => _refreshRoom());
-    unawaited(_refreshRoom());
+    player.addListener(_onPlayer);
+    _poll = Timer.periodic(pollEvery, (_) => _pull());
+    _heartbeat = Timer.periodic(heartbeatEvery, (_) => _sendHeartbeat());
+    _members = Timer.periodic(membersEvery, (_) => _refreshMembers());
+    unawaited(_refreshMembers());
     notifyListeners();
   }
 
   void _exit() {
     player.removeListener(_onPlayer);
+    _poll?.cancel();
     _heartbeat?.cancel();
-    _refresh?.cancel();
-    _heartbeat = _refresh = null;
+    _members?.cancel();
+    _poll = _heartbeat = _members = null;
     _roomId = null;
     _inviterId = null;
     _host = false;
@@ -154,29 +194,42 @@ class ListenTogether extends ChangeNotifier {
     null => null,
   };
 
-  /// 房主：播放器变了就上报。换了列表报列表，换了歌报 GOTO，播放 / 暂停报 PLAY / PAUSE，
-  /// 进度跳变（拖进度条）报 SEEK。
+  // ---- 本地 → 房间 ----
+
+  /// 播放器变了就上报：换列表报列表，换歌报 GOTO，播放 / 暂停报 PLAY / PAUSE，拖进度报 SEEK。
+  /// 刚照着房间指令操作过的变化不报。
   void _onPlayer() {
-    if (!_host || _roomId == null) return;
-    unawaited(_reportQueue());
+    if (_roomId == null) return;
     final song = player.current?.id;
     final playing = player.isPlaying;
-    if (song != _lastSongId) {
-      unawaited(_reportPlayback(command: 'GOTO'));
-    } else if (playing != _lastPlaying) {
-      unawaited(_reportPlayback(command: playing ? 'PLAY' : 'PAUSE'));
-    } else if (_jumped()) {
-      unawaited(_reportPlayback(command: 'SEEK'));
+    if (DateTime.now().isBefore(_suppressUntil) || player.isLoading) {
+      _remember();
+      return;
     }
+    unawaited(_reportQueue());
+    if (song != _lastSongId) {
+      unawaited(_report('GOTO'));
+    } else if (playing != _lastPlaying) {
+      unawaited(_report(playing ? 'PLAY' : 'PAUSE'));
+    } else if (_jumped()) {
+      unawaited(_report('SEEK'));
+    }
+    _remember();
+  }
+
+  void _remember() {
+    _lastSongId = player.current?.id;
+    _lastPlaying = player.isPlaying;
     _lastPosition = player.position;
     _lastPositionAt = DateTime.now();
   }
 
   /// 进度和按时间推算的位置差了 3 秒以上，算拖了进度条。
   bool _jumped() {
-    final elapsed = player.isPlaying ? DateTime.now().difference(_lastPositionAt) : Duration.zero;
-    final expected = _lastPosition + elapsed;
-    return (player.position - expected).abs() > const Duration(seconds: 3);
+    final elapsed = (_lastPlaying ?? false)
+        ? DateTime.now().difference(_lastPositionAt)
+        : Duration.zero;
+    return (player.position - (_lastPosition + elapsed)).abs() > const Duration(seconds: 3);
   }
 
   Future<void> _reportQueue({bool force = false}) async {
@@ -193,13 +246,16 @@ class ListenTogether extends ChangeNotifier {
     }
   }
 
-  Future<void> _reportPlayback({required String command}) async {
+  Future<void> _report(String command) async {
     final id = _roomId;
     final song = player.current;
     if (id == null || song == null) return;
     final former = _lastSongId;
-    _lastSongId = song.id;
-    _lastPlaying = player.isPlaying;
+    final seq = ++_seq;
+    _sent.add(seq);
+    while (_sent.length > 64) {
+      _sent.removeFirst();
+    }
     try {
       await api.listenTogetherCommand(
         id,
@@ -207,8 +263,8 @@ class ListenTogether extends ChangeNotifier {
         songId: song.id,
         playing: player.isPlaying,
         progress: player.position,
-        clientSeq: ++_seq,
-        formerSongId: command == 'GOTO' && former != null ? former : '-1',
+        clientSeq: seq,
+        formerSongId: command == 'GOTO' && former != null && former != song.id ? former : '-1',
       );
       if (command == 'GOTO') await _sendHeartbeat();
     } catch (_) {
@@ -230,44 +286,141 @@ class ListenTogether extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// 刷新成员；加入方顺便看房间的歌单有没有换。房间没了就退出。
-  Future<void> _refreshRoom() async {
+  // ---- 房间 → 本地 ----
+
+  /// 拉一次房间快照，有别人的新指令就照着做。
+  Future<void> _pull() async {
+    final id = _roomId;
+    if (id == null || _polling) return;
+    _polling = true;
+    try {
+      final snap = await api.listenTogetherSnapshot(id);
+      if (_roomId != id) return;
+      final wasStruggling = struggling;
+      _failures = 0;
+      if (wasStruggling) notifyListeners();
+      await _apply(snap);
+    } catch (_) {
+      _failures++;
+      if (_failures == 2) notifyListeners();
+    } finally {
+      _polling = false;
+    }
+  }
+
+  bool _isOurs(ListenTogetherCommand c) =>
+      c.userId == account.profile?.userId && _sent.contains(c.clientSeq);
+
+  Future<void> _apply(ListenTogetherSnapshot snap) async {
+    final c = snap.command;
+    if (c != null && c.clientSeq > _seq) _seq = c.clientSeq;
+    final ids = snap.songIds;
+    final listChanged = ids.isNotEmpty && !listEquals(ids, _lastQueue);
+    final fresh = c != null && !_isOurs(c) && _seen != (c.serverTime, c.userId, c.clientSeq);
+    if (c != null) _seen = (c.serverTime, c.userId, c.clientSeq);
+    if (fresh) {
+      _remote = c;
+      _remoteAt = DateTime.now();
+    }
+    // 房间的歌单换了（别人换的）：换成房间的歌单。
+    if (listChanged) {
+      _lastQueue = ids;
+      final queueIds = [for (final s in player.queue) s.id];
+      if (!listEquals(ids, queueIds)) {
+        await _replaceQueue(ids, songId: (fresh ? c : _remote)?.songId);
+      }
+    }
+    final remote = _remote;
+    if (remote == null) return;
+    // 别人的新指令照着做；旧指令只在进度偏得太多时校正一下。
+    if (fresh || listChanged) {
+      await _follow(remote);
+    } else if (remote.playing && player.isPlaying && player.current?.id == remote.songId) {
+      await _seekIfOff(remote);
+    }
+  }
+
+  Future<void> _replaceQueue(List<String> ids, {String? songId}) async {
+    final known = {for (final s in player.queue) s.id: s};
+    final missing = [
+      for (final id in ids)
+        if (!known.containsKey(id)) id,
+    ];
+    if (missing.isNotEmpty) {
+      for (final s in await api.songDetails(missing)) {
+        known[s.id] = s;
+      }
+    }
+    final songs = [for (final id in ids) ?known[id]];
+    if (songs.isEmpty) return;
+    final start = songId == null
+        ? 0
+        : songs.indexWhere((s) => s.id == songId).clamp(0, songs.length - 1);
+    _suppress();
+    await player.playQueue(songs, start: start, title: '一起听');
+  }
+
+  /// 照着房间指令：切到那首歌，跳到推算的进度，播放或暂停。
+  Future<void> _follow(ListenTogetherCommand c) async {
+    _suppress();
+    if (player.current?.id != c.songId) {
+      final i = player.queue.indexWhere((s) => s.id == c.songId);
+      if (i >= 0) {
+        await player.jumpTo(i);
+      } else {
+        final songs = await api.songDetails([c.songId]);
+        if (songs.isEmpty) return;
+        await player.playNext(songs.first);
+        final j = player.queue.indexWhere((s) => s.id == c.songId);
+        if (j >= 0) await player.jumpTo(j);
+      }
+    }
+    await _seekIfOff(c);
+    if (c.playing && !player.isPlaying) {
+      await player.play();
+    } else if (!c.playing && player.isPlaying) {
+      await player.pause();
+    }
+    _suppress();
+    _remember();
+  }
+
+  Future<void> _seekIfOff(ListenTogetherCommand c) async {
+    final target = c.positionAt(DateTime.now(), receivedAt: _remoteAt);
+    if ((player.position - target).abs() > seekThreshold) {
+      _suppress();
+      await player.seek(target);
+    }
+  }
+
+  void _suppress() => _suppressUntil = DateTime.now().add(_echoWindow);
+
+  /// 刷新成员；房间确实没了就退出。
+  Future<void> _refreshMembers() async {
     final id = _roomId;
     if (id == null) return;
     try {
       final status = await api.listenTogetherStatus();
       if (_roomId != id) return;
       if (!status.inRoom || (status.roomId != null && status.roomId != id)) {
-        _exit();
+        _absent++;
+        if (_absent >= 2 && DateTime.now().difference(_enteredAt) > _grace) _exit();
         return;
       }
+      _absent = 0;
       if (status.users.isNotEmpty) _users = status.users;
       notifyListeners();
-      if (!_host) await _pullQueue(play: false);
     } catch (_) {
       // 网络抖动时保留原状态，下次再刷。
     }
   }
 
-  /// 加入方：取房间的歌单。[play] 为 true 时立即从第一首开始放；否则只在歌单变了时替换。
-  Future<void> _pullQueue({required bool play}) async {
-    final id = _roomId;
-    if (id == null) return;
-    final ids = await api.listenTogetherPlaylist(id);
-    if (ids.isEmpty || (!play && listEquals(ids, _lastQueue))) return;
-    _lastQueue = ids;
-    final songs = await api.songDetails(ids);
-    if (songs.isEmpty || _roomId != id) return;
-    final current = player.current?.id;
-    final start = play ? 0 : songs.indexWhere((s) => s.id == current).clamp(0, songs.length - 1);
-    await player.playQueue(songs, start: start, title: '一起听');
-  }
-
   @override
   void dispose() {
     player.removeListener(_onPlayer);
+    _poll?.cancel();
     _heartbeat?.cancel();
-    _refresh?.cancel();
+    _members?.cancel();
     super.dispose();
   }
 }

@@ -1502,11 +1502,31 @@ class NeteaseApi {
     );
   }
 
-  /// 房间当前的播放列表（歌曲 id，按显示顺序）。
-  Future<List<String>> listenTogetherPlaylist(String roomId) async {
+  /// 房间的快照：播放列表（歌曲 id，按显示顺序）和最后一条播放指令。
+  ///
+  /// 加入方靠定时拉这个接口跟上房主：指令里有当前歌曲、播放状态、发指令时的进度，
+  /// 以及服务器收到指令的时间（`serverSeq`，毫秒时间戳），据此推算现在的进度。
+  /// 字段参考开源项目 Enji（together.rs）和 MeloX-Android 的实现。
+  Future<ListenTogetherSnapshot> listenTogetherSnapshot(String roomId) async {
     final data = await _eapi('/api/listen/together/sync/playlist/get', {'roomId': roomId});
-    final list = _obj(_obj(_obj(data['data'])['playlist'])['displayList']);
-    return [for (final id in _list(list['result'])) '$id'];
+    final d = _obj(data['data']);
+    final list = _obj(_obj(d['playlist'])['displayList']);
+    final c = _obj(d['playCommand']);
+    final song = '${c['targetSongId'] ?? c['songId'] ?? ''}';
+    final status = '${c['playStatus'] ?? ''}'.toUpperCase();
+    return ListenTogetherSnapshot(
+      songIds: [for (final id in _list(list['result'])) '$id'],
+      command: song.isEmpty || song == '0' || (status != 'PLAY' && status != 'PAUSE')
+          ? null
+          : ListenTogetherCommand(
+              songId: song,
+              playing: status == 'PLAY',
+              progress: Duration(milliseconds: _int(c['progress']).clamp(0, 1 << 31)),
+              serverTime: _int(c['serverSeq']),
+              clientSeq: _int(c['clientSeq']),
+              userId: _int(c['userId']),
+            ),
+    );
   }
 
   /// 主机上报整个播放列表（REPLACE）。[version] 每次加一。

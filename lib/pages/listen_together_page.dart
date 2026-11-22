@@ -126,7 +126,7 @@ class _LobbyState extends State<_Lobby> {
                 Text('加入好友的房间', style: text.titleLarge?.copyWith(color: scheme.onSurface)),
                 const SizedBox(height: 4),
                 Text(
-                  '粘贴好友发来的一起听邀请链接。加入后会同步房间的歌单。',
+                  '粘贴好友发来的一起听邀请链接。加入后会跟上房间正在放的歌和进度。',
                   style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 12),
@@ -179,9 +179,13 @@ class _InRoom extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          listen.isHost ? '你的切歌、暂停和进度会同步给房间里的人。' : '房间的歌单会自动同步。网易云没有公开房主的实时进度，所以不能精确同步到秒。',
+          listen.isHost ? '你和好友谁切歌、暂停、拖进度，都会同步给对方。' : '已跟上房主的歌和进度。你和房主谁切歌、暂停、拖进度，都会同步给对方。',
           style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
         ),
+        if (listen.struggling) ...[
+          const SizedBox(height: 8),
+          Text('连接不稳定，正在重试…', style: text.bodySmall?.copyWith(color: scheme.error)),
+        ],
         const SizedBox(height: 20),
         Text('房间里的人', style: text.titleSmall?.copyWith(color: scheme.onSurface)),
         const SizedBox(height: 12),
