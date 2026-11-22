@@ -7,12 +7,16 @@ import '../../shell/player_bar.dart';
 import '../../state/account_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/cover_art.dart';
+import '../../widgets/entry_card.dart';
 import '../../widgets/playlist_card.dart';
 import '../login_page.dart';
+import '../music/nav.dart';
+import '../music/ranking_page.dart';
+import '../music/recent_page.dart';
 import 'playlist_editor.dart';
 import 'playlist_page.dart';
 
-/// 底部「音乐库」标签：我喜欢的音乐、创建的歌单、收藏的歌单，以及歌单管理。
+/// 底部「音乐库」标签：我喜欢的音乐、最近播放和听歌排行入口、创建的歌单、收藏的歌单，以及歌单管理。
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
@@ -74,6 +78,31 @@ class _LibraryPageState extends State<LibraryPage> {
           Padding(
             padding: EdgeInsets.symmetric(horizontal: hPad),
             child: _LikedCard(playlist: liked, onReturned: _reload),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: hPad),
+            child: Row(
+              children: [
+                Expanded(
+                  child: EntryCard(
+                    icon: Icons.history_rounded,
+                    label: '最近播放',
+                    onTap: () =>
+                        SubPage.push(context, const SubPage(title: '最近播放', body: RecentPage())),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: EntryCard(
+                    icon: Icons.show_chart_rounded,
+                    label: '听歌排行',
+                    onTap: () =>
+                        SubPage.push(context, const SubPage(title: '听歌排行', body: RankingPage())),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           _SectionHeader(

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/pages/listen_together_page.dart';
+import 'package:netease_client/pages/login_page.dart';
 import 'package:netease_client/shell/pill_nav_bar.dart';
 import 'package:netease_client/pages/now_playing/lyrics_copy.dart';
 import 'package:netease_client/pages/now_playing/now_playing_page.dart';
@@ -53,22 +54,22 @@ void main() {
     expect(find.text('登录后查看你的音乐库'), findsOneWidget);
   });
 
-  testWidgets('avatar opens drawer; recent plays asks to log in', (tester) async {
+  testWidgets('the more menu offers settings and account; account asks to log in', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.byTooltip('个人中心'));
+    expect(find.byType(Drawer), findsNothing);
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
-    expect(find.text('未登录'), findsOneWidget);
-    expect(find.text('听歌排行'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('账户'), findsOneWidget);
 
-    await tester.tap(find.text('最近播放'));
+    await tester.tap(find.text('账户'));
     await settle(tester);
-    expect(find.text('未登录'), findsNothing);
-    expect(find.text('登录后查看最近播放'), findsOneWidget);
+    expect(find.byType(LoginPage), findsOneWidget);
   });
 
   testWidgets('settings tab exposes quality, lyric source and login methods', (tester) async {
     await pumpApp(tester, withQueue: false);
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
     await tester.tap(find.text('设置'));
     await settle(tester);
@@ -86,7 +87,7 @@ void main() {
 
   testWidgets('settings: audio cache limit can be picked or typed in', (tester) async {
     await pumpApp(tester, withQueue: false);
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
     await tester.tap(find.text('设置'));
     await settle(tester);

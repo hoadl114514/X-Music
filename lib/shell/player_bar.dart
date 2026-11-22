@@ -113,28 +113,32 @@ class FloatingBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nav = navigation;
-    final scheme = context.scheme;
-    // 渐变的终点用页面底色，悬浮的播放条和底栏下面的内容渐隐。
-    final end = scheme.surface;
-    final bar = DecoratedBox(
+    final end = context.scheme.surface;
+    // 二级页面没有导航栏：播放条离屏幕底边（手势条）再抬高一点。
+    final content = nav == null
+        ? const SafeArea(
+            top: false,
+            minimum: EdgeInsets.only(bottom: 12),
+            child: Padding(padding: EdgeInsets.only(bottom: 8), child: PlayerBar()),
+          )
+        : Column(mainAxisSize: MainAxisSize.min, children: [const PlayerBar(), nav]);
+    // 渐变铺在播放条和导航栏后面一整块，从透明过渡到页面底色。
+    // 两者之间不再有一截不透明的底色，看不出黑边。
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [end.withValues(alpha: 0), end.withValues(alpha: 0.85), end],
-          stops: const [0, 0.4, 1],
+          colors: [
+            end.withValues(alpha: 0),
+            end.withValues(alpha: 0.7),
+            end.withValues(alpha: 0.9),
+          ],
+          stops: const [0, 0.45, 1],
         ),
       ),
-      // 二级页面没有导航栏：播放条离屏幕底边（手势条）再抬高一点。
-      child: nav == null
-          ? const SafeArea(
-              top: false,
-              minimum: EdgeInsets.only(bottom: 12),
-              child: Padding(padding: EdgeInsets.only(bottom: 8), child: PlayerBar()),
-            )
-          : const PlayerBar(),
+      child: content,
     );
-    return Column(mainAxisSize: MainAxisSize.min, children: [bar, ?nav]);
   }
 }
 

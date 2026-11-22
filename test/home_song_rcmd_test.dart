@@ -159,9 +159,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('drawer items open as their own page; back returns home', (tester) async {
+  testWidgets('new songs open from discover as their own page; back returns', (tester) async {
     await pumpHome(tester, const Size(400, 900));
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.text('发现'));
     await settle(tester);
     await tester.tap(find.text('新歌速递'));
     await settle(tester);
@@ -170,11 +170,11 @@ void main() {
     // 单独的页面：标题栏有返回键。
     expect(find.byType(BackButton), findsOneWidget);
 
-    // 系统返回回到首页，不会退出应用。
+    // 系统返回回到发现页，不会退出应用。
     await tester.binding.handlePopRoute();
     await settle(tester);
     expect(find.text('华语'), findsNothing);
-    expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
+    expect(find.text('新歌速递'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

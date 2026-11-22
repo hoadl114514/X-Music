@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import '../../app/app.dart';
 import '../../data/models.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/entry_card.dart';
 import '../../widgets/playlist_card.dart';
 import '../library/track_list_view.dart';
 import '../search_page.dart';
+import 'nav.dart';
+import 'new_songs_page.dart';
 import '../../shell/player_bar.dart';
 
-/// 发现：热搜 + 官方排行榜。
+/// 发现：新歌速递入口 + 热搜 + 官方排行榜。
 class DiscoverPage extends StatefulWidget {
   const DiscoverPage({super.key});
 
@@ -45,6 +48,17 @@ class _DiscoverPageState extends State<DiscoverPage> {
           onRefresh: _reload,
           child: CustomScrollView(
             slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: EntryCard(
+                    icon: Icons.fiber_new_rounded,
+                    label: '新歌速递',
+                    onTap: () =>
+                        SubPage.push(context, const SubPage(title: '新歌速递', body: NewSongsPage())),
+                  ),
+                ),
+              ),
               if (hot.isNotEmpty) ...[
                 const _Title('热搜'),
                 SliverPadding(

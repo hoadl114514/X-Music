@@ -88,6 +88,9 @@ void main() {
     expect(paths.where((p) => p == '/api/user/playlist').length, 2);
     expect(find.text('我喜欢的音乐'), findsOneWidget);
     expect(find.text('321 首'), findsOneWidget);
+    // 最近播放、听歌排行从原来的侧栏搬到了音乐库。
+    expect(find.text('最近播放'), findsOneWidget);
+    expect(find.text('听歌排行'), findsOneWidget);
     expect(find.text('创建的歌单'), findsOneWidget);
     expect(find.text('7 首'), findsOneWidget);
     expect(find.text('自建歌单'), findsOneWidget);
