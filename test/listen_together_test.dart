@@ -161,4 +161,17 @@ void main() {
     expect(player.position.inSeconds, inInclusiveRange(34, 37));
     await listen.leave();
   });
+
+  test('a longer room list (host FM got more songs) does not restart the current song', () async {
+    final f = await fakeServices();
+    final player = f.services.player;
+    await player.playQueue([song('1'), song('2')], title: '一起听');
+    f.engine.advance(const Duration(seconds: 40));
+    final loads = f.engine.loaded.length;
+    await player.syncQueue([song('1'), song('2'), song('3'), song('4')], title: '一起听');
+    expect(player.current?.id, '1');
+    expect([for (final s in player.queue) s.id], ['1', '2', '3', '4']);
+    expect(f.engine.loaded.length, loads, reason: '没有重新加载');
+    expect(f.engine.position, const Duration(seconds: 40), reason: '没有跳回开头');
+  });
 }

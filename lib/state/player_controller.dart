@@ -318,6 +318,28 @@ class PlayerController extends ChangeNotifier {
     return _load(start.clamp(0, songs.length - 1));
   }
 
+  /// 换成 [songs] 但不打断当前这首：当前这首在新队列里时只换队列、不重新加载，
+  /// 否则和 [playQueue] 一样从 [start] 开始放。用于一起听同步房间歌单（例如房主的私人 FM 续了一批歌）。
+  /// 换成的是普通队列：自己的私人 FM 会停止续歌。
+  Future<void> syncQueue(List<Song> songs, {int start = 0, String title = ''}) {
+    final cur = current;
+    final i = cur == null ? -1 : songs.indexWhere((s) => s.id == cur.id);
+    if (i < 0) return playQueue(songs, start: start, title: title);
+    if (isRadio) _applyMode(_savedMode);
+    _extend = null;
+    _extendFuture = null;
+    _radioSeen.clear();
+    _queue = List.unmodifiable(songs);
+    _index = i;
+    _shuffleNext = null;
+    _upNext = null;
+    _queueTitle = title;
+    _sourceId = null;
+    _history.clear();
+    notifyListeners();
+    return Future.value();
+  }
+
   /// 播放一个无尽队列（私人 FM）：先取第一批，放到最后一首时再用 [fetch] 取下一批。
   /// 随机播放对它无意义，期间关闭。
   Future<void> playRadio(Future<List<Song>> Function() fetch, {required String title}) async {

@@ -357,7 +357,8 @@ class ListenTogether extends ChangeNotifier {
         ? 0
         : songs.indexWhere((s) => s.id == songId).clamp(0, songs.length - 1);
     _suppress();
-    await player.playQueue(songs, start: start, title: '一起听');
+    // 当前这首还在新歌单里就不打断（房主私人 FM 续歌时，歌单会一直变长）。
+    await player.syncQueue(songs, start: start, title: '一起听');
   }
 
   /// 照着房间指令：切到那首歌，跳到推算的进度，播放或暂停。
