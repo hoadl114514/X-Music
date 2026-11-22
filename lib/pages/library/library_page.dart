@@ -13,10 +13,11 @@ import '../login_page.dart';
 import '../music/nav.dart';
 import '../music/ranking_page.dart';
 import '../music/recent_page.dart';
+import 'followed_artists_page.dart';
 import 'playlist_editor.dart';
 import 'playlist_page.dart';
 
-/// 底部「音乐库」标签：我喜欢的音乐、最近播放和听歌排行入口、创建的歌单、收藏的歌单，以及歌单管理。
+/// 底部「音乐库」标签：我喜欢的音乐、最近播放、听歌排行和艺人入口、创建的歌单、收藏的歌单，以及歌单管理。
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
@@ -84,23 +85,20 @@ class _LibraryPageState extends State<LibraryPage> {
             padding: EdgeInsets.symmetric(horizontal: hPad),
             child: Row(
               children: [
-                Expanded(
-                  child: EntryCard(
-                    icon: Icons.history_rounded,
-                    label: '最近播放',
-                    onTap: () =>
-                        SubPage.push(context, const SubPage(title: '最近播放', body: RecentPage())),
+                for (final (i, e) in [
+                  (Icons.history_rounded, '最近播放', const RecentPage()),
+                  (Icons.show_chart_rounded, '听歌排行', const RankingPage()),
+                  (Icons.mic_external_on_rounded, '艺人', const FollowedArtistsPage()),
+                ].indexed) ...[
+                  if (i > 0) const SizedBox(width: 12),
+                  Expanded(
+                    child: EntryCard(
+                      icon: e.$1,
+                      label: e.$2,
+                      onTap: () => SubPage.push(context, SubPage(title: e.$2, body: e.$3)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: EntryCard(
-                    icon: Icons.show_chart_rounded,
-                    label: '听歌排行',
-                    onTap: () =>
-                        SubPage.push(context, const SubPage(title: '听歌排行', body: RankingPage())),
-                  ),
-                ),
+                ],
               ],
             ),
           ),
@@ -109,10 +107,26 @@ class _LibraryPageState extends State<LibraryPage> {
             title: '创建的歌单',
             count: created.length,
             padding: hPad,
-            action: TextButton.icon(
-              onPressed: () => showCreatePlaylistDialog(context),
-              icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('新建'),
+            // 「新建」弹出菜单：普通歌单或共建歌单。
+            action: MenuAnchor(
+              alignmentOffset: const Offset(-48, 0),
+              menuChildren: [
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.queue_music_rounded),
+                  onPressed: () => showCreatePlaylistDialog(context),
+                  child: const Text('歌单'),
+                ),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.group_add_rounded),
+                  onPressed: () => showCreatePlaylistDialog(context, shared: true),
+                  child: const Text('共建歌单'),
+                ),
+              ],
+              builder: (context, menu, _) => TextButton.icon(
+                onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: const Text('新建'),
+              ),
             ),
           ),
           if (created.isEmpty)

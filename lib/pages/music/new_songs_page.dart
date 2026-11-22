@@ -5,7 +5,7 @@ import '../../app/app.dart';
 import '../../theme/app_theme.dart';
 import '../library/track_list_view.dart';
 
-/// 新歌速递：按地区列出最近一周上架的新歌。从抽屉侧栏进入。
+/// 新歌速递：按地区列出最近一周上架的新歌。发现页的「最新音乐」标签。
 class NewSongsPage extends StatefulWidget {
   const NewSongsPage({super.key});
 

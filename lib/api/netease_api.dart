@@ -585,6 +585,67 @@ class NeteaseApi {
     return [for (final p in _list(data['list'])) ?_parsePlaylist(p)];
   }
 
+  /// 歌单广场：分类 [cat]（「全部」或分类名）下的热门歌单，按 [offset] 翻页。
+  /// 参考 api-enhanced 的 top_playlist。
+  Future<({List<Playlist> items, bool more})> playlistSquare({
+    String cat = '全部',
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final data = await _weapi('/api/playlist/list', {
+      'cat': cat,
+      'order': 'hot',
+      'limit': limit,
+      'offset': offset,
+      'total': true,
+    });
+    final items = [for (final p in _list(data['playlists'])) ?_parsePlaylist(p)];
+    return (items: items, more: data['more'] == true);
+  }
+
+  /// 精品歌单。翻页用上一页最后一个歌单的 `updateTime`（[before]），第一页传 0。
+  /// 参考 api-enhanced 的 top_playlist_highquality。
+  Future<({List<Playlist> items, bool more, int lastTime})> highQualityPlaylists({
+    String cat = '全部',
+    int limit = 30,
+    int before = 0,
+  }) async {
+    final data = await _weapi('/api/playlist/highquality/list', {
+      'cat': cat,
+      'limit': limit,
+      'lasttime': before,
+      'total': true,
+    });
+    final items = [for (final p in _list(data['playlists'])) ?_parsePlaylist(p)];
+    return (items: items, more: data['more'] == true, lastTime: _int(data['lasttime']));
+  }
+
+  /// 歌单分类：热门标签。参考 api-enhanced 的 playlist_hot。
+  Future<List<String>> playlistHotTags() async {
+    final data = await _weapi('/api/playlist/hottags', const {});
+    return [
+      for (final t in _list(data['tags']))
+        if (t is Map) ?_str(t['name']),
+    ];
+  }
+
+  /// 歌单分类：全部分类，按大类（语种、风格……）分组。参考 api-enhanced 的 playlist_catlist。
+  Future<List<({String group, List<String> names})>> playlistCategories() async {
+    final data = await _weapi('/api/playlist/catalogue', const {});
+    final groups = data['categories'];
+    final byGroup = <String, List<String>>{};
+    for (final c in _list(data['sub'])) {
+      if (c is! Map) continue;
+      final name = _str(c['name']);
+      if (name == null) continue;
+      byGroup.putIfAbsent('${c['category']}', () => []).add(name);
+    }
+    return [
+      for (final MapEntry(:key, :value) in byGroup.entries)
+        (group: groups is Map ? '${groups[key] ?? key}' : key, names: value),
+    ];
+  }
+
   /// 热搜词。
   Future<List<String>> hotSearches() async {
     final data = await _api('https://music.163.com/api/hotsearchlist/get', const {});
@@ -1038,6 +1099,22 @@ class NeteaseApi {
     '/api/artist/${follow ? 'sub' : 'unsub'}',
     {'artistId': artistId, 'artistIds': '[$artistId]'},
   );
+
+  /// 已关注（收藏）的歌手，按 [offset] 翻页。参考 api-enhanced 的 artist_sublist。
+  Future<({List<Artist> items, bool more})> followedArtists({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final data = await _weapi('/api/artist/sublist', {
+      'limit': limit,
+      'offset': offset,
+      'total': true,
+    });
+    return (
+      items: [for (final a in _list(data['data'])) ?_parseArtist(a)],
+      more: data['hasMore'] == true,
+    );
+  }
 
   /// 歌手的全部歌曲：[byTime] 为 true 按发行时间从新到旧，否则按热度。
   /// 接口单页最多 100 首（再大会返回别人的歌），先取第一页拿到总数，剩下的几页并发取。

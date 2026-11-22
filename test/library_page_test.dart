@@ -91,6 +91,13 @@ void main() {
     // 最近播放、听歌排行从原来的侧栏搬到了音乐库。
     expect(find.text('最近播放'), findsOneWidget);
     expect(find.text('听歌排行'), findsOneWidget);
+    expect(find.text('艺人'), findsOneWidget);
+    // 「新建」可以选普通歌单或共建歌单。
+    await tester.tap(find.text('新建'));
+    await tester.pumpAndSettle();
+    expect(find.text('共建歌单'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
     expect(find.text('创建的歌单'), findsOneWidget);
     expect(find.text('7 首'), findsOneWidget);
     expect(find.text('自建歌单'), findsOneWidget);

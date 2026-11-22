@@ -185,7 +185,7 @@ class _Results extends StatelessWidget {
                   key: ValueKey('artist:$k'),
                   noun: '歌手',
                   fetch: (offset) => api.searchArtists(k, limit: _pageSize, offset: offset),
-                  itemBuilder: (context, items, i) => _ArtistTile(artist: items[i]),
+                  itemBuilder: (context, items, i) => ArtistTile(artist: items[i]),
                 ),
                 _PagedResults<Album>(
                   key: ValueKey('album:$k'),
@@ -561,8 +561,9 @@ class _PagedResultsState<T> extends State<_PagedResults<T>> with AutomaticKeepAl
   }
 }
 
-class _ArtistTile extends StatelessWidget {
-  const _ArtistTile({required this.artist});
+/// 歌手一行：圆形头像、名字、单曲和专辑数，点了进歌手页。搜索结果和已关注的艺人共用。
+class ArtistTile extends StatelessWidget {
+  const ArtistTile({super.key, required this.artist});
 
   final Artist artist;
 
@@ -586,7 +587,8 @@ class _ArtistTile extends StatelessWidget {
       ),
       title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        '单曲 ${a.songCount} · 专辑 ${a.albumCount}',
+        // 已关注列表的接口不带单曲数。
+        a.songCount > 0 ? '单曲 ${a.songCount} · 专辑 ${a.albumCount}' : '专辑 ${a.albumCount}',
         style: TextStyle(color: context.colors.textSecondary),
       ),
       onTap: () => openArtist(context, ArtistRef(a.id, a.name)),

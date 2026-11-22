@@ -206,5 +206,17 @@ void main() {
     expect(find.byType(ListenTogetherBar), findsOneWidget);
     expect(find.byTooltip('退出房间'), findsNothing);
     expect(find.byTooltip('结束房间'), findsNothing);
+
+    // 「更多」里有一起听，点了打开一起听页面。
+    await tester.tap(find.byTooltip('更多'));
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('一起听'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('一起听'));
+    await settle(tester);
+    expect(find.byType(ListenTogetherPage), findsOneWidget);
   });
 }

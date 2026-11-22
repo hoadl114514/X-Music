@@ -324,7 +324,7 @@ class _BarBody extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: 12),
-              _Avatars(users: listen.users),
+              MemberAvatars(users: listen.users),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -379,44 +379,55 @@ class _BarBody extends StatelessWidget {
   }
 }
 
-/// 最多三个头像叠在一起；没有成员时显示耳机图标。
-class _Avatars extends StatelessWidget {
-  const _Avatars({required this.users});
+/// 一起听的成员头像：最多三个叠在一起，外面一圈 [ring] 色描边隔开。没有成员时显示耳机图标。
+class MemberAvatars extends StatelessWidget {
+  const MemberAvatars({
+    super.key,
+    required this.users,
+    this.size = 32,
+    this.ring = Colors.black26,
+    this.background = Colors.white24,
+    this.foreground = Colors.white,
+  });
 
   final List<SocialUser> users;
-
-  static const _size = 32.0;
-  static const _step = 20.0;
+  final double size;
+  final Color ring;
+  final Color background;
+  final Color foreground;
 
   @override
   Widget build(BuildContext context) {
     final shown = users.take(3).toList();
     if (shown.isEmpty) {
-      return const SizedBox(
-        width: _size,
-        child: Icon(Icons.headphones_rounded, color: Colors.white),
+      return SizedBox(
+        width: size,
+        child: Icon(Icons.headphones_rounded, color: foreground, size: size * 0.75),
       );
     }
+    final step = size * 0.62;
+    final border = size < 28 ? 1.5 : 2.0;
     return SizedBox(
-      width: _size + _step * (shown.length - 1),
-      height: _size,
+      width: size + step * (shown.length - 1),
+      height: size,
       child: Stack(
         children: [
           for (var i = 0; i < shown.length; i++)
             Positioned(
-              left: _step * i,
+              left: step * i,
               child: Container(
-                padding: const EdgeInsets.all(1.5),
-                decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
+                padding: EdgeInsets.all(border),
+                decoration: BoxDecoration(color: ring, shape: BoxShape.circle),
                 child: CircleAvatar(
-                  radius: _size / 2 - 1.5,
-                  backgroundColor: Colors.white24,
-                  foregroundImage: shown[i].avatarUrl == null
-                      ? null
-                      : retryImage(shown[i].avatarUrl!),
+                  radius: size / 2 - border,
+                  backgroundColor: background,
+                  foregroundImage: switch (shown[i].avatarUrl) {
+                    final url? => retryImage(url),
+                    null => null,
+                  },
                   child: Text(
                     shown[i].nickname.isEmpty ? '?' : shown[i].nickname.characters.first,
-                    style: const TextStyle(fontSize: 12, color: Colors.white),
+                    style: TextStyle(fontSize: size * 0.38, color: foreground),
                   ),
                 ),
               ),

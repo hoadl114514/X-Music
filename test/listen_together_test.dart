@@ -236,6 +236,8 @@ void main() {
     expect(find.textContaining('一起听 · '), findsOneWidget);
     expect(find.text('你是房主'), findsOneWidget);
     expect(find.byTooltip('邀请好友'), findsOneWidget);
+    // 播放页的一起听条和下面主界面的迷你播放条上都有成员头像。
+    expect(find.byType(MemberAvatars, skipOffstage: false), findsNWidgets(2));
 
     await tester.tap(find.byTooltip('结束房间'));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
