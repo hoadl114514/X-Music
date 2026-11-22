@@ -1,9 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
+import 'package:netease_client/pages/listen_together_page.dart';
 import 'package:netease_client/state/listen_together.dart';
 
 import 'support/fakes.dart';
@@ -173,5 +176,71 @@ void main() {
     expect([for (final s in player.queue) s.id], ['1', '2', '3', '4']);
     expect(f.engine.loaded.length, loads, reason: '没有重新加载');
     expect(f.engine.position, const Duration(seconds: 40), reason: '没有跳回开头');
+  });
+
+  testWidgets('the now playing page shows a listen together bar while in a room', (tester) async {
+    tester.view.physicalSize = const Size(400, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final client = MockClient((req) async {
+      final body = switch (req.url.path) {
+        '/api/nuser/account/get' => {
+          'code': 200,
+          'profile': {'userId': 7, 'nickname': '我'},
+        },
+        '/eapi/listen/together/room/create' => {
+          'code': 200,
+          'data': {
+            'roomInfo': {'roomId': 'r1', 'creatorId': 7},
+          },
+        },
+        '/weapi/listen/together/status/get' => {
+          'code': 200,
+          'data': {
+            'inRoom': true,
+            'roomInfo': {
+              'roomId': 'r1',
+              'roomUsers': [
+                {'userId': 7, 'nickname': '我'},
+                {'userId': 8, 'nickname': '好友'},
+              ],
+            },
+          },
+        },
+        _ => {'code': 200},
+      };
+      return http.Response(jsonEncode(body), 200, headers: {'content-type': 'application/json'});
+    });
+    final f = await fakeServices(client: client);
+    await tester.runAsync(() async {
+      await f.services.account.loginWithCookies({'MUSIC_U': 'x'});
+    });
+    await tester.pumpWidget(NeteaseClientApp(services: f.services));
+    await f.services.player.playQueue([song('1'), song('2')], title: '测试');
+    await f.services.player.pause();
+    await tester.pump();
+
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await tester.tap(find.text('歌曲1').last);
+    await settle();
+    expect(find.byType(ListenTogetherBar), findsOneWidget);
+    expect(find.byTooltip('结束房间'), findsNothing);
+
+    await tester.runAsync(() => f.services.listen.createRoom());
+    await settle();
+    expect(find.textContaining('一起听 · '), findsOneWidget);
+    expect(find.text('你是房主'), findsOneWidget);
+    expect(find.byTooltip('邀请好友'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('结束房间'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle();
+    expect(f.services.listen.active, isFalse);
+    expect(find.byTooltip('结束房间'), findsNothing);
   });
 }

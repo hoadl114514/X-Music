@@ -10,7 +10,6 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cover_art.dart';
 import '../widgets/retry_image.dart';
-import '../widgets/round_icon_button.dart';
 import '../widgets/share.dart';
 import 'login_page.dart';
 import 'music/nav.dart';
@@ -271,53 +270,159 @@ class _Member extends StatelessWidget {
   }
 }
 
-/// 播放页上的「一起听」按钮：在房间里时高亮并显示人数，点开一起听页面。
-class ListenTogetherButton extends StatelessWidget {
-  const ListenTogetherButton({super.key, required this.size, required this.iconSize});
+/// 播放页底部的一起听条：只在房间里时出现。显示成员和状态，可以邀请好友、退出房间，点条本身打开一起听页面。
+///
+/// 不在房间里时只占一段空白，让播放控制区离底部留够距离。
+class ListenTogetherBar extends StatelessWidget {
+  const ListenTogetherBar({super.key});
 
-  final double size;
-  final double iconSize;
+  /// 不在房间里时留的空白高度。
+  static const idleGap = 56.0;
 
   @override
   Widget build(BuildContext context) {
     final listen = AppScope.of(context).listen;
     return ListenableBuilder(
       listenable: listen,
-      builder: (context, _) {
-        final n = listen.users.length;
-        return SizedBox(
-          width: size + 16,
-          height: size,
-          child: Stack(
-            clipBehavior: Clip.none,
+      builder: (context, _) => AnimatedSize(
+        duration: Durations.medium2,
+        curve: Easing.emphasizedDecelerate,
+        alignment: Alignment.topCenter,
+        child: listen.active
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: _BarBody(listen: listen),
+              )
+            : const SizedBox(height: idleGap, width: double.infinity),
+      ),
+    );
+  }
+}
+
+class _BarBody extends StatelessWidget {
+  const _BarBody({required this.listen});
+
+  final ListenTogether listen;
+
+  @override
+  Widget build(BuildContext context) {
+    final n = listen.users.length;
+    final link = listen.inviteLink;
+    final status = listen.struggling
+        ? '连接不稳定，正在重试…'
+        : listen.isHost
+        ? '你是房主'
+        : '已加入好友的房间';
+    return Material(
+      color: Colors.white.withValues(alpha: 0.14),
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => ListenTogetherPage.open(context),
+        child: SizedBox(
+          height: 56,
+          child: Row(
             children: [
-              RoundIconButton(
-                icon: listen.active ? Icons.headphones_rounded : Icons.headphones_outlined,
-                onPressed: () => ListenTogetherPage.open(context),
-                tooltip: '一起听',
-                color: listen.active ? context.colors.accent : Colors.white,
-                size: size,
-                iconSize: iconSize,
-              ),
-              if (listen.active && n > 0)
-                Positioned(
-                  left: size * 0.62,
-                  top: size * 0.08,
-                  child: IgnorePointer(
-                    child: Text(
-                      '$n',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: context.colors.accent,
+              const SizedBox(width: 12),
+              _Avatars(users: listen.users),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      n > 0 ? '一起听 · $n 人' : '一起听',
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
+                    Text(
+                      status,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: listen.struggling ? Colors.orangeAccent : Colors.white60,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              if (listen.isHost && link != null)
+                IconButton(
+                  tooltip: '邀请好友',
+                  color: Colors.white,
+                  onPressed: () => shareText(
+                    '来和我一起听歌吧：$link',
+                    subject: '一起听',
+                    title: '邀请好友一起听',
+                    copied: '已复制邀请链接',
+                  ),
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                ),
+              IconButton(
+                tooltip: listen.isHost ? '结束房间' : '退出房间',
+                color: Colors.white,
+                onPressed: listen.busy ? null : () => _run(context, listen.leave),
+                icon: const Icon(Icons.logout_rounded),
+              ),
+              const SizedBox(width: 6),
             ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+/// 最多三个头像叠在一起；没有成员时显示耳机图标。
+class _Avatars extends StatelessWidget {
+  const _Avatars({required this.users});
+
+  final List<SocialUser> users;
+
+  static const _size = 32.0;
+  static const _step = 20.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = users.take(3).toList();
+    if (shown.isEmpty) {
+      return const SizedBox(
+        width: _size,
+        child: Icon(Icons.headphones_rounded, color: Colors.white),
+      );
+    }
+    return SizedBox(
+      width: _size + _step * (shown.length - 1),
+      height: _size,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: _step * i,
+              child: Container(
+                padding: const EdgeInsets.all(1.5),
+                decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
+                child: CircleAvatar(
+                  radius: _size / 2 - 1.5,
+                  backgroundColor: Colors.white24,
+                  foregroundImage: shown[i].avatarUrl == null
+                      ? null
+                      : retryImage(shown[i].avatarUrl!),
+                  child: Text(
+                    shown[i].nickname.isEmpty ? '?' : shown[i].nickname.characters.first,
+                    style: const TextStyle(fontSize: 12, color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

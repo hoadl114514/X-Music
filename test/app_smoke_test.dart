@@ -196,14 +196,14 @@ void main() {
     expect(find.text('复制歌名 - 歌手'), findsOneWidget);
   });
 
-  testWidgets('now playing opens listen together', (tester) async {
+  testWidgets('now playing has add-to-playlist and hides listen bar outside rooms', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('歌曲1').last);
     await settle(tester);
-    await tester.tap(find.byTooltip('一起听'));
-    await settle(tester);
-    expect(find.byType(ListenTogetherPage), findsOneWidget);
-    expect(find.text('开一个房间'), findsOneWidget);
-    expect(find.text('加入好友的房间'), findsOneWidget);
+    expect(find.byTooltip('收藏到歌单'), findsOneWidget);
+    expect(find.byTooltip('一起听'), findsNothing);
+    expect(find.byType(ListenTogetherBar), findsOneWidget);
+    expect(find.byTooltip('退出房间'), findsNothing);
+    expect(find.byTooltip('结束房间'), findsNothing);
   });
 }

@@ -128,8 +128,8 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ],
                   ),
                 ),
-                // 控制区离底部留够距离，单手拇指更好按。
-                const SizedBox(height: 56),
+                // 在一起听房间里时显示一起听条；不在时留一段空白，单手拇指更好按。
+                const ListenTogetherBar(),
               ],
             ),
           ),
@@ -402,7 +402,14 @@ class _TitleRow extends StatelessWidget {
           iconSize: large ? 26 : 24,
           color: Colors.white,
         ),
-        ListenTogetherButton(size: large ? 44 : 40, iconSize: large ? 24 : 22),
+        RoundIconButton(
+          icon: Icons.playlist_add_rounded,
+          tooltip: '收藏到歌单',
+          color: Colors.white,
+          size: large ? 44 : 40,
+          iconSize: large ? 24 : 22,
+          onPressed: () => showAddToPlaylistSheet(context, song),
+        ),
       ],
     );
   }
