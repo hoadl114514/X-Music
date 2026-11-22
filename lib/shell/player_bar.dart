@@ -115,7 +115,14 @@ class FloatingBottomBar extends StatelessWidget {
           stops: const [0, 0.4, 1],
         ),
       ),
-      child: nav == null ? const SafeArea(top: false, child: PlayerBar()) : const PlayerBar(),
+      // 二级页面没有导航栏：播放条离屏幕底边（手势条）再抬高一点。
+      child: nav == null
+          ? const SafeArea(
+              top: false,
+              minimum: EdgeInsets.only(bottom: 12),
+              child: Padding(padding: EdgeInsets.only(bottom: 8), child: PlayerBar()),
+            )
+          : const PlayerBar(),
     );
     return Column(mainAxisSize: MainAxisSize.min, children: [bar, ?nav]);
   }
