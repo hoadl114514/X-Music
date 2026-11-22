@@ -114,8 +114,8 @@ class FloatingBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final nav = navigation;
     final scheme = context.scheme;
-    // 有导航栏时渐变的终点用导航栏的底色，播放条和导航栏连成一体。
-    final end = nav == null ? scheme.surface : scheme.surfaceContainer;
+    // 渐变的终点用页面底色，悬浮的播放条和底栏下面的内容渐隐。
+    final end = scheme.surface;
     final bar = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(

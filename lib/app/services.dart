@@ -12,6 +12,7 @@ import '../lyrics/lyric_service.dart';
 import '../lyrics/qq_lyrics.dart';
 import '../state/account_controller.dart';
 import '../state/player_controller.dart';
+import '../state/listen_together.dart';
 import '../state/settings.dart';
 import '../widgets/image_disk_cache.dart';
 import 'update_checker.dart';
@@ -66,6 +67,9 @@ class AppServices {
   final AccountController account;
   final PlayerController player;
 
+  /// 一起听。
+  late final listen = ListenTogether(api: api, player: player, account: account);
+
   /// 听歌缓存。测试里为 null。
   final AudioCache? audioCache;
 
@@ -76,6 +80,7 @@ class AppServices {
   final UpdateChecker? updates;
 
   void dispose() {
+    listen.dispose();
     player.dispose();
     audioCache?.dispose();
     account.dispose();

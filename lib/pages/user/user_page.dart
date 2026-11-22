@@ -11,15 +11,12 @@ import '../../widgets/cover_art.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/playlist_card.dart';
 import '../../widgets/song_tile.dart';
-import 'user_status.dart';
 import '../library/playlist_page.dart';
 import '../library/track_list_view.dart';
 import '../music/artist_page.dart';
 import '../music/nav.dart';
 import '../music/ranking_page.dart';
-import '../social/event_card.dart';
 import '../social/follow_list_page.dart';
-import '../social/messages_page.dart';
 import '../social/social_widgets.dart';
 import '../../shell/player_bar.dart';
 
@@ -57,7 +54,6 @@ class UserPageData {
     this.created = const [],
     this.subscribed = const [],
     this.liked,
-    this.status,
   });
 
   final UserDetail? user;
@@ -68,9 +64,6 @@ class UserPageData {
 
   /// 「TA 喜欢的音乐」歌单。
   final Playlist? liked;
-
-  /// 账号当前的状态（需要登录才能取）；没设置或取不到为 null。
-  final UserStatus? status;
 
   String get name => artist?.name ?? user?.nickname ?? '';
   String? get avatarUrl => artist?.avatarUrl ?? user?.avatarUrl;
@@ -116,20 +109,14 @@ Future<UserPageData> loadUserPage(AppServices services, {int? userId, ArtistRef?
   }
 
   var playlists = const <Playlist>[];
-  UserStatus? status;
   if (uid != null) {
-    final statusFuture = user != null && api.hasLoginCookie
-        ? api.userStatus(uid).catchError((Object _) => null)
-        : Future<UserStatus?>.value();
     playlists = await api.userPlaylists(uid).catchError((Object _) => const <Playlist>[]);
-    status = await statusFuture;
   }
   final id = uid;
   return UserPageData(
     user: user,
     artist: artistInfo,
     hotSongs: hotSongs,
-    status: status,
     liked: playlists.where((p) => p.isLikedList).firstOrNull,
     created: [
       for (final p in playlists)
@@ -172,16 +159,12 @@ class _UserPageState extends State<UserPage> {
         }
         final home = _HomeTab(data: d, onRefresh: _reload);
         final a = d.artist;
-        final u = d.user;
-        final self = u != null && u.userId == AccountScope.of(context).profile?.userId;
         final works = d.hasWorks && a != null;
         final ref = a == null ? null : ArtistRef(a.id, a.name);
         final tabs = <(String, Widget)>[
           ('主页', home),
           if (works) ('全部歌曲', ArtistAllSongs(artist: ref!)),
           if (works) ('专辑', ArtistAlbums(artist: ref!)),
-          if (u != null)
-            ('动态', UserEventList(userId: u.userId, empty: self ? '还没有发过动态' : 'TA 还没有发过动态')),
         ];
         if (tabs.length == 1) return SubPage(title: title, body: home);
         return DefaultTabController(
@@ -413,10 +396,6 @@ class _Header extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                   ),
                 ],
-                if (u != null && (self || d.status != null)) ...[
-                  const SizedBox(height: 8),
-                  UserStatusChip(status: d.status, editable: self),
-                ],
                 if (!self && (u != null || a != null)) ...[
                   const SizedBox(height: 10),
                   Wrap(
@@ -429,23 +408,6 @@ class _Header extends StatelessWidget {
                         followed: a?.followed ?? u!.followed,
                         compact: true,
                       ),
-                      if (u != null)
-                        OutlinedButton(
-                          onPressed: () => ChatPage.open(
-                            context,
-                            SocialUser(
-                              userId: u.userId,
-                              nickname: u.nickname,
-                              avatarUrl: u.avatarUrl,
-                            ),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: BorderSide(color: context.colors.outline),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          child: const Text('私信'),
-                        ),
                     ],
                   ),
                 ],

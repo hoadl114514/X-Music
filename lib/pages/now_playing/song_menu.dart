@@ -8,10 +8,8 @@ import '../../theme/app_theme.dart';
 import '../../state/account_controller.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/playlist_card.dart';
-import '../comments/comments_page.dart';
 import '../login_page.dart';
 import '../music/nav.dart';
-import '../social/compose_event_page.dart';
 import '../../widgets/copy_sheet.dart';
 import 'lyrics_copy.dart';
 
@@ -331,30 +329,12 @@ class _SongMenu extends StatelessWidget {
                   }),
                 ),
               ListTile(
-                leading: Icon(Icons.mode_comment_outlined, color: context.colors.textPrimary),
-                title: const Text('查看评论'),
-                onTap: () {
-                  final nav = Navigator.of(context);
-                  nav.pop();
-                  CommentsPage.openSong(nav.context, song);
-                },
-              ),
-              ListTile(
                 leading: Icon(Icons.playlist_add_rounded, color: context.colors.textPrimary),
                 title: const Text('收藏到歌单'),
                 onTap: () {
                   final nav = Navigator.of(context);
                   nav.pop();
                   showAddToPlaylistSheet(nav.context, song);
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
-                title: const Text('分享到动态'),
-                onTap: () {
-                  final nav = Navigator.of(context);
-                  nav.pop();
-                  ComposeEventPage.open(nav.context, song: song);
                 },
               ),
               ListTile(

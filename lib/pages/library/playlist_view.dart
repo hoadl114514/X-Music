@@ -4,7 +4,6 @@ import '../../app/app.dart';
 import '../../data/format.dart';
 import '../../data/models.dart';
 import '../../state/account_controller.dart';
-import '../comments/comments_page.dart';
 import '../music/nav.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/playlist_card.dart';
@@ -57,21 +56,7 @@ class PlaylistView extends StatelessWidget {
           ?p.description,
         ],
         onPlayAll: playAll,
-        actions: [
-          _SubscribeButton(playlist: p),
-          IconButton(
-            tooltip: '评论',
-            onPressed: () => CommentsPage.open(
-              context,
-              target: CommentTarget.playlist,
-              id: p.id,
-              title: p.name,
-              subtitle: p.creator,
-              coverUrl: p.coverUrl ?? tracks.where((t) => t.coverUrl != null).firstOrNull?.coverUrl,
-            ),
-            icon: const Icon(Icons.mode_comment_outlined),
-          ),
-        ],
+        actions: [_SubscribeButton(playlist: p)],
       ),
     );
   }

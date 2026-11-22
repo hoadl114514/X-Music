@@ -61,9 +61,9 @@ class AccountController extends ChangeNotifier {
   }
 
   /// 新建歌单，成功后刷新歌单列表并返回新歌单（找不到时为 null）。
-  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+  Future<Playlist?> createPlaylist(String name, {bool private = false, bool shared = false}) async {
     if (!isLoggedIn) throw const ApiException('登录后才能新建歌单', code: 301);
-    final created = await _api.createPlaylist(name, private: private);
+    final created = await _api.createPlaylist(name, private: private, shared: shared);
     await _reloadPlaylists();
     return _find(created?.id) ?? created;
   }

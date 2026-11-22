@@ -8,7 +8,6 @@ import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/pages/library/playlist_editor.dart';
 import 'package:netease_client/pages/library/playlist_page.dart';
-import 'package:netease_client/pages/social/follow_page.dart';
 import 'package:netease_client/state/account_controller.dart';
 import 'package:netease_client/state/player_controller.dart';
 
@@ -198,33 +197,17 @@ void main() {
     expect(find.byType(PlaylistPage), findsNothing);
   });
 
-  testWidgets('posting from the follow tab sends the event', (tester) async {
-    final paths = <String>[];
-    await _pump(tester, _client(paths), const Scaffold(body: FollowPage()));
-    await tester.tap(find.text('分享新鲜事…'));
-    await tester.pumpAndSettle();
-    expect(find.text('发动态'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), '今天的歌很好听');
-    await tester.pump();
-    await tester.tap(find.text('发布'));
-    await tester.pumpAndSettle();
-    expect(paths, contains('/api/share/friends/resource'));
-    expect(find.text('发动态'), findsNothing);
-    // 发完刷新列表：关注动态请求了两次。
-    expect(paths.where((p) => p == '/api/v1/event/get'), hasLength(2));
-  });
-
-  testWidgets('song menu offers play next, like, collect, comments, share, artists, album', (
-    tester,
-  ) async {
+  testWidgets('song menu offers play next, like, collect, share, artists, album', (tester) async {
     await _pump(tester, _client([]), const PlaylistPage(playlist: _playlist));
     expect(find.text('歌1'), findsOneWidget);
     await tester.tap(find.byTooltip('更多').first);
     await tester.pumpAndSettle();
-    for (final t in ['下一首播放', '喜欢', '收藏到歌单', '从歌单中删除', '评论', '分享链接', '分享到动态']) {
+    for (final t in ['下一首播放', '喜欢', '收藏到歌单', '从歌单中删除', '分享链接']) {
       expect(find.text(t), findsOneWidget, reason: t);
     }
+    // 社交功能已砍掉。
+    expect(find.text('评论'), findsNothing);
+    expect(find.text('分享到动态'), findsNothing);
     expect(find.text('歌手：歌手甲 / 歌手乙'), findsOneWidget);
     expect(find.text('专辑：专辑1'), findsOneWidget);
   });

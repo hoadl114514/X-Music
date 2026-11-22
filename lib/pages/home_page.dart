@@ -605,7 +605,7 @@ class _Greeting extends StatelessWidget {
         Text(switch (AccountScope.of(context).profile) {
           final p? => '${greetingFor(DateTime.now())}，${p.nickname}',
           null => greetingFor(DateTime.now()),
-        }, style: text.headlineMedium?.copyWith(color: context.scheme.onSurface)),
+        }, style: text.titleLarge?.copyWith(color: context.scheme.onSurface)),
         const SizedBox(height: 4),
         Text('由此开启好心情 ~', style: text.bodyLarge?.copyWith(color: context.scheme.onSurfaceVariant)),
       ],

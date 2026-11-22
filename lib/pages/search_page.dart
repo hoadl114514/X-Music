@@ -20,10 +20,13 @@ import 'music/nav.dart';
 /// 输入框为空时显示搜索历史和热搜；
 /// 提交后显示单曲 / 歌单 / 歌手 / 专辑四个标签，各自滚到底自动加载下一页。
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key, this.keyword = ''});
+  const SearchPage({super.key, this.keyword = '', this.embedded = false});
 
   /// 为空时进入输入状态。
   final String keyword;
+
+  /// 作为底栏的「搜索」标签显示：没有返回键，不自动弹键盘，底栏由主框架提供。
+  final bool embedded;
 
   /// 直接搜索 [keyword]。
   static Future<void> open(BuildContext context, String keyword) {
@@ -81,11 +84,12 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        automaticallyImplyLeading: !widget.embedded,
+        titleSpacing: widget.embedded ? 16 : 0,
         title: TextField(
           controller: _input,
           focusNode: _focus,
-          autofocus: !_showResults,
+          autofocus: !_showResults && !widget.embedded,
           textInputAction: TextInputAction.search,
           onSubmitted: _search,
           // 一改输入就回到联想状态。
@@ -127,8 +131,8 @@ class _SearchPageState extends State<SearchPage> {
       body: _showResults
           ? _Results(key: ValueKey(_keyword), keyword: _keyword)
           : _Suggestions(input: _input, onSearch: _search),
-      extendBody: true,
-      bottomNavigationBar: const FloatingBottomBar(),
+      extendBody: !widget.embedded,
+      bottomNavigationBar: widget.embedded ? null : const FloatingBottomBar(),
     );
   }
 }

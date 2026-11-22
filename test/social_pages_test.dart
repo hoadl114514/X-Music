@@ -5,9 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
-import 'package:netease_client/data/models.dart';
-import 'package:netease_client/pages/social/follow_page.dart';
-import 'package:netease_client/pages/social/messages_page.dart';
 import 'package:netease_client/pages/social/social_widgets.dart';
 import 'package:netease_client/state/account_controller.dart';
 import 'package:netease_client/state/player_controller.dart';
@@ -120,58 +117,6 @@ Future<void> _pump(WidgetTester tester, MockClient client, Widget page) async {
 }
 
 void main() {
-  setUp(ConversationReads.reset);
-
-  testWidgets('follow tab shows followed friends and their feed, filtered by kind', (tester) async {
-    await _pump(tester, _client(), const FollowPage());
-    expect(find.text('好友甲'), findsOneWidget);
-    expect(find.text('全部好友'), findsOneWidget);
-    expect(find.text('我的关注'), findsOneWidget);
-    expect(find.text('朋友的动态'), findsOneWidget);
-    expect(find.text('音乐人的动态'), findsOneWidget);
-
-    await tester.tap(find.text('音乐人'));
-    await tester.pumpAndSettle();
-    expect(find.text('朋友的动态'), findsNothing);
-    expect(find.text('音乐人的动态'), findsOneWidget);
-
-    await tester.tap(find.text('朋友'));
-    await tester.pumpAndSettle();
-    expect(find.text('朋友的动态'), findsOneWidget);
-    expect(find.text('音乐人的动态'), findsNothing);
-  });
-
-  testWidgets('chat shows history and appends a sent message', (tester) async {
-    final sent = <http.Request>[];
-    await _pump(
-      tester,
-      _client(sent: sent),
-      const ChatPage(user: SocialUser(userId: 2, nickname: '好友甲')),
-    );
-    expect(find.text('在吗'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), '在的');
-    await tester.tap(find.byTooltip('发送'));
-    await tester.pumpAndSettle();
-    expect(sent, hasLength(1));
-    expect(find.text('在的'), findsOneWidget);
-  });
-
-  testWidgets('the unread badge goes away after reading the chat', (tester) async {
-    await _pump(tester, _client(), const MessagesPage());
-    expect(find.text('3'), findsOneWidget);
-
-    await tester.tap(find.text('好友甲'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ChatPage), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ChatPage), findsNothing);
-    expect(find.text('好友甲'), findsOneWidget);
-    expect(find.text('3'), findsNothing);
-  });
-
   testWidgets('a risk-controlled follow explains itself in a dialog', (tester) async {
     await _pump(tester, _client(), const Center(child: FollowButton(userId: 2, followed: false)));
     await tester.tap(find.text('关注'));

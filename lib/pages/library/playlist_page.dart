@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../data/models.dart';
 import '../../shell/player_bar.dart';
 import '../../state/account_controller.dart';
-import '../social/compose_event_page.dart';
 import 'playlist_editor.dart';
 import 'playlist_view.dart';
 
@@ -34,12 +33,6 @@ class PlaylistPage extends StatelessWidget {
                   if (context.mounted) Navigator.of(context).maybePop();
                 },
               ),
-            )
-          else if (account.isLoggedIn)
-            IconButton(
-              tooltip: '分享到动态',
-              icon: const Icon(Icons.campaign_outlined),
-              onPressed: () => ComposeEventPage.open(context, playlist: p),
             ),
         ],
       ),

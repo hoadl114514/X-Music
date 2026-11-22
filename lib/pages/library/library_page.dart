@@ -9,7 +9,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/playlist_card.dart';
 import '../login_page.dart';
-import '../social/compose_event_page.dart';
 import 'playlist_editor.dart';
 import 'playlist_page.dart';
 
@@ -141,11 +140,6 @@ Future<void> _showCollectedSheet(BuildContext context, Playlist playlist) {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
-              title: const Text('分享到动态'),
-              onTap: () => then((c) => ComposeEventPage.open(c, playlist: playlist)),
-            ),
             ListTile(
               leading: Icon(Icons.bookmark_remove_outlined, color: context.colors.negative),
               title: Text('取消收藏', style: TextStyle(color: context.colors.negative)),

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
-import 'package:netease_client/pages/comments/comments_page.dart';
+import 'package:netease_client/pages/listen_together_page.dart';
+import 'package:netease_client/shell/pill_nav_bar.dart';
 import 'package:netease_client/pages/now_playing/lyrics_copy.dart';
 import 'package:netease_client/pages/now_playing/now_playing_page.dart';
 
@@ -43,7 +44,7 @@ void main() {
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -600));
     await settle(tester);
     expect(find.text('推荐歌单'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(PillNavBar), findsOneWidget);
     // 没有在放的歌时不显示迷你播放条。
     expect(find.byTooltip('歌词'), findsNothing);
 
@@ -195,16 +196,14 @@ void main() {
     expect(find.text('复制歌名 - 歌手'), findsOneWidget);
   });
 
-  testWidgets('now playing opens the song comments', (tester) async {
+  testWidgets('now playing opens listen together', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('歌曲1').last);
     await settle(tester);
-    await tester.tap(find.byTooltip('评论'));
+    await tester.tap(find.byTooltip('一起听'));
     await settle(tester);
-    expect(find.byType(CommentsPage), findsOneWidget);
-    expect(find.text('热门'), findsOneWidget);
-    expect(find.text('最新'), findsOneWidget);
-    expect(find.text('还没有评论，来抢沙发吧 ~'), findsOneWidget);
-    expect(find.text('说点什么吧'), findsOneWidget);
+    expect(find.byType(ListenTogetherPage), findsOneWidget);
+    expect(find.text('开一个房间'), findsOneWidget);
+    expect(find.text('加入好友的房间'), findsOneWidget);
   });
 }

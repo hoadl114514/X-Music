@@ -815,3 +815,18 @@ class StatusRcmd {
   final UserStatus? status;
   final List<StatusUser> users;
 }
+
+/// 一起听的状态：是否在房间里，房间号、房主、房间里的人。
+class ListenTogetherStatus {
+  const ListenTogetherStatus({
+    required this.inRoom,
+    this.roomId,
+    this.creatorId = 0,
+    this.users = const [],
+  });
+
+  final bool inRoom;
+  final String? roomId;
+  final int creatorId;
+  final List<SocialUser> users;
+}

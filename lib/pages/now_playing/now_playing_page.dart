@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
 import '../../data/models.dart';
-import '../comments/comments_page.dart';
 import '../music/nav.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../listen_together_page.dart';
 import '../../widgets/copy_sheet.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/flow_background.dart';
@@ -402,101 +402,8 @@ class _TitleRow extends StatelessWidget {
           iconSize: large ? 26 : 24,
           color: Colors.white,
         ),
-        _CommentButton(song: song, size: large ? 44 : 40, iconSize: large ? 24 : 22),
+        ListenTogetherButton(size: large ? 44 : 40, iconSize: large ? 24 : 22),
       ],
-    );
-  }
-}
-
-/// 评论按钮，右上角带评论数（超过 999 显示 999+）。
-class _CommentButton extends StatefulWidget {
-  const _CommentButton({required this.song, required this.size, required this.iconSize});
-
-  final Song song;
-  final double size;
-  final double iconSize;
-
-  @override
-  State<_CommentButton> createState() => _CommentButtonState();
-}
-
-class _CommentButtonState extends State<_CommentButton> {
-  /// 每首歌只取一次评论数，封面 / 歌词两页和反复打开播放页共用。
-  static final _counts = <String, int>{};
-  static final _pending = <String, Future<int>>{};
-
-  int? _count;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(_CommentButton old) {
-    super.didUpdateWidget(old);
-    if (old.song.id != widget.song.id) _load();
-  }
-
-  void _load() {
-    final id = widget.song.id;
-    _count = _counts[id];
-    if (_count != null) return;
-    final api = AppScope.of(context).api;
-    _pending
-        .putIfAbsent(
-          id,
-          () => api
-              .comments(CommentTarget.song.threadId(id), pageSize: 1)
-              .then((p) => _counts[id] = p.total)
-              // 注意不能写成 `=> _pending.remove(id)`：remove 返回的就是这个 future 本身，
-              // whenComplete 会等它完成，自己等自己，后面的 setState 永远不会执行。
-              .whenComplete(() {
-                _pending.remove(id);
-              }),
-        )
-        .then((n) {
-          if (mounted && widget.song.id == id) setState(() => _count = n);
-        })
-        .catchError((Object _) {}); // 取不到就不显示数字。
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final n = _count;
-    // 右边多留一点宽度给评论数，免得「999+」伸出屏幕边缘。
-    return SizedBox(
-      width: widget.size + 16,
-      height: widget.size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          RoundIconButton(
-            icon: Icons.mode_comment_outlined,
-            onPressed: () => CommentsPage.openSong(context, widget.song),
-            tooltip: '评论',
-            color: Colors.white,
-            size: widget.size,
-            iconSize: widget.iconSize,
-          ),
-          if (n != null && n > 0)
-            Positioned(
-              left: widget.size * 0.62,
-              top: widget.size * 0.08,
-              child: IgnorePointer(
-                child: Text(
-                  n > 999 ? '999+' : '$n',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

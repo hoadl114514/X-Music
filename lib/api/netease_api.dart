@@ -377,11 +377,12 @@ class NeteaseApi {
   // playlist_cover_update，都需要登录。
 
   /// 新建歌单，返回新歌单（接口没给时为 null）。[private] 为 true 时是隐私歌单。
-  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+  /// [shared] 为 true 时是共建歌单（官方叫共享歌单，type 为 SHARED），可以邀请好友一起加歌。
+  Future<Playlist?> createPlaylist(String name, {bool private = false, bool shared = false}) async {
     final data = await _weapi('/api/playlist/create', {
       'name': name,
       'privacy': private ? '10' : '0',
-      'type': 'NORMAL',
+      'type': shared ? 'SHARED' : 'NORMAL',
     });
     return _parsePlaylist(data['playlist']);
   }
@@ -1453,7 +1454,121 @@ class NeteaseApi {
     'Cookie': encodeCookie(_cookieFor(profile, anonymous: anonymous)),
   };
 
-  /// 秒级时间戳，EAPI / XEAPI 的 `buildver`。
+  // ---- 一起听 ----
+  //
+  // 接口参考 api-enhanced 的 listentogether_*（以及 NeteaseCloudMusicApi issue #1676 的分析），都需要登录。
+  // 官方客户端靠长连接实时同步；公开接口只有「主机上报」这一侧，加入方只能轮询房间状态和播放列表。
+
+  /// 创建一起听房间，返回房间号。
+  Future<String> listenTogetherCreate() async {
+    final data = await _eapi('/api/listen/together/room/create', {'refer': 'songplay_more'});
+    final room = _obj(_obj(data['data'])['roomInfo']);
+    final id = '${room['roomId'] ?? ''}';
+    if (id.isEmpty) throw const ApiException('没有拿到房间号');
+    return id;
+  }
+
+  /// 房间能不能加入（status 为 AVAILABLE、joinable 为 true）。
+  Future<bool> listenTogetherCheck(String roomId) async {
+    final data = await _eapi('/api/listen/together/room/check', {'roomId': roomId});
+    final d = _obj(data['data']);
+    return d['joinable'] != false && (d['status'] == null || d['status'] == 'AVAILABLE');
+  }
+
+  /// 接受邀请，加入别人的房间。
+  Future<void> listenTogetherAccept(String roomId, String inviterId) => _eapi(
+    '/api/listen/together/play/invitation/accept',
+    {'refer': 'inbox_invite', 'roomId': roomId, 'inviterId': inviterId},
+  );
+
+  /// 当前账号的一起听状态：是否在房间里、房间号、房间里的人。
+  Future<ListenTogetherStatus> listenTogetherStatus() async {
+    final data = await _weapi('/api/listen/together/status/get', const {});
+    final d = _obj(data['data']);
+    final room = _obj(d['roomInfo']);
+    return ListenTogetherStatus(
+      inRoom: d['inRoom'] == true,
+      roomId: _str('${room['roomId'] ?? ''}'),
+      creatorId: _int(room['creatorId']),
+      users: [
+        for (final u in _list(room['roomUsers']))
+          if (u is Map)
+            SocialUser(
+              userId: _int(u['userId']),
+              nickname: _str(u['nickname']) ?? '',
+              avatarUrl: _https(_str(u['avatarUrl'])),
+            ),
+      ],
+    );
+  }
+
+  /// 房间当前的播放列表（歌曲 id，按显示顺序）。
+  Future<List<String>> listenTogetherPlaylist(String roomId) async {
+    final data = await _eapi('/api/listen/together/sync/playlist/get', {'roomId': roomId});
+    final list = _obj(_obj(_obj(data['data'])['playlist'])['displayList']);
+    return [for (final id in _list(list['result'])) '$id'];
+  }
+
+  /// 主机上报整个播放列表（REPLACE）。[version] 每次加一。
+  Future<void> listenTogetherSyncList(
+    String roomId, {
+    required int userId,
+    required int version,
+    required List<String> songIds,
+    String playMode = 'ORDER_LOOP',
+  }) => _eapi('/api/listen/together/sync/list/command/report', {
+    'roomId': roomId,
+    'playlistParam': jsonEncode({
+      'commandType': 'REPLACE',
+      'version': [
+        {'userId': userId, 'version': version},
+      ],
+      'anchorSongId': '',
+      'anchorPosition': -1,
+      'randomList': songIds,
+      'displayList': songIds,
+      'playMode': playMode,
+    }),
+  });
+
+  /// 主机上报播放指令：[command] 为 PLAY / PAUSE / GOTO / SEEK。
+  Future<void> listenTogetherCommand(
+    String roomId, {
+    required String command,
+    required String songId,
+    required bool playing,
+    required Duration progress,
+    required int clientSeq,
+    String formerSongId = '-1',
+  }) => _eapi('/api/listen/together/play/command/report', {
+    'roomId': roomId,
+    'commandInfo': jsonEncode({
+      'commandType': command,
+      'progress': progress.inMilliseconds,
+      'playStatus': playing ? 'PLAY' : 'PAUSE',
+      'formerSongId': formerSongId,
+      'targetSongId': songId,
+      'clientSeq': clientSeq,
+    }),
+  });
+
+  /// 心跳：每首歌开始时和之后定时上报当前歌曲与进度。
+  Future<void> listenTogetherHeartbeat(
+    String roomId, {
+    required String songId,
+    required bool playing,
+    required Duration progress,
+  }) => _eapi('/api/listen/together/heartbeat', {
+    'roomId': roomId,
+    'songId': songId,
+    'playStatus': playing ? 'PLAY' : 'PAUSE',
+    'progress': progress.inMilliseconds,
+  });
+
+  /// 结束房间（主机）或退出。
+  Future<void> listenTogetherEnd(String roomId) =>
+      _eapi('/api/listen/together/end/v2', {'roomId': roomId});
+
   static String _buildver() => '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
 
   /// 以 PC 客户端身份发一个明文 `/api/` 请求。
@@ -1676,6 +1791,7 @@ class NeteaseApi {
   }
 
   static List<Object?> _list(Object? v) => v is List ? v : const [];
+  static Map<Object?, Object?> _obj(Object? v) => v is Map ? v : const {};
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
   static String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
 
