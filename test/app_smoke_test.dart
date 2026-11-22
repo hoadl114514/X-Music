@@ -74,7 +74,14 @@ void main() {
     await tester.tap(find.text('设置'));
     await settle(tester);
     expect(find.text('默认音质'), findsOneWidget);
+    expect(find.text('移动网络播放音质'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('USB DAC 独占模式'), 200);
+    expect(find.text('输出通道'), findsOneWidget);
+    expect(find.text('输出位深'), findsOneWidget);
+    expect(find.text('输出采样率'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('默认歌词来源'), -200);
     expect(find.text('默认歌词来源'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('登录账号'), -200);
     await tester.tap(find.text('登录账号'));
     await settle(tester);
     // 默认是扫码；假接口没给 key，显示错误而不是一直转圈。

@@ -29,11 +29,18 @@ abstract class AudioEngine {
   /// 播放过程中出错（解码失败、网络中断等）。
   Stream<Object> get errors;
 
+  /// 丢掉原生播放器重新建一个（输出位深、采样率改了要重建才生效）。之后要重新 [load]。
+  Future<void> rebuild();
+
   Future<void> dispose();
 }
 
 class JustAudioEngine implements AudioEngine {
   JustAudioEngine() {
+    _listen();
+  }
+
+  void _listen() {
     _sub = _player.playerStateStream.listen((s) {
       if (s.processingState == ProcessingState.completed) _completed.add(null);
     }, onError: (Object e, StackTrace _) => _errors.add(e));
@@ -45,10 +52,10 @@ class JustAudioEngine implements AudioEngine {
     await session.configure(const AudioSessionConfiguration.music());
   }
 
-  final _player = AudioPlayer();
+  var _player = AudioPlayer();
   final _completed = StreamController<void>.broadcast();
   final _errors = StreamController<Object>.broadcast();
-  late final StreamSubscription<PlayerState> _sub;
+  late StreamSubscription<PlayerState> _sub;
 
   CachingAudioSource? _caching;
 
@@ -93,6 +100,17 @@ class JustAudioEngine implements AudioEngine {
 
   @override
   Stream<Object> get errors => _errors.stream;
+
+  @override
+  Future<void> rebuild() async {
+    final old = _player;
+    await _sub.cancel();
+    _caching?.dispose();
+    _caching = null;
+    _player = AudioPlayer();
+    _listen();
+    await old.dispose();
+  }
 
   @override
   Future<void> dispose() async {

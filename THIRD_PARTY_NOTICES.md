@@ -30,3 +30,11 @@ QRC 解密（QQ 修改版三重 DES + zlib）以及 QRC 时间语义，改编自
 （MIT License，Copyright (c) 2013-2022 Binaryify）的 `util/crypto.js`、`util/request.js`、
 `module/register_xeapikey.js` 与 `module/song_url_v1.js` 移植。
 参考提交：984cc02
+
+## just_audio
+
+`third_party/just_audio/` 是 just_audio 0.10.6 的副本，安卓端加了输出位深、重采样、
+输出设备的配置钩子（改动见 `third_party/just_audio/NOTICE_X_MUSIC.md`）。
+
+- 项目：[ryanheise/just_audio](https://github.com/ryanheise/just_audio)
+- 许可证：MIT（全文见 `third_party/just_audio/LICENSE`）

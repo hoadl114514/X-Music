@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../api/netease_api.dart';
 import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
+import '../audio/audio_output.dart';
 import '../data/models.dart';
 import '../data/retry.dart';
 import '../lyrics/lyric_service.dart';
@@ -76,6 +77,7 @@ class PlayerController extends ChangeNotifier {
     required this._backend,
     required this._settings,
     this.cache,
+    this.output,
     this.retryDelays = defaultRetryDelays,
   }) {
     _applyMode(_savedMode);
@@ -87,6 +89,51 @@ class PlayerController extends ChangeNotifier {
 
   /// 听歌缓存。为 null 时不缓存（测试）。
   final AudioCache? cache;
+
+  /// 音频输出和网络类型的原生接口。为 null 时不区分移动网络、不设置输出（测试可传假的）。
+  final AudioOutput? output;
+
+  /// 上一首歌加载时是不是移动网络。在播放页切音质时据此决定改哪个默认音质。
+  bool _onCellular = false;
+
+  /// 现在该用的默认音质：移动网络下用移动网络音质（设过的话）。
+  Future<AudioQuality> _preferredQuality() async {
+    final mobile = _settings.mobileQuality;
+    _onCellular = mobile != null && output != null && await output!.isCellular();
+    return _onCellular ? mobile! : _settings.preferredQuality;
+  }
+
+  /// 上次应用的位深和采样率。变了才需要重建播放器。
+  ({OutputBitDepth bitDepth, int sampleRate})? _appliedFormat;
+
+  /// 按设置应用输出设备、位深、采样率和 USB 独占。
+  ///
+  /// 位深或采样率变了要重建原生播放器：当前歌曲从原来的位置重新加载，保持播放状态。
+  Future<OutputResult?> applyOutput() async {
+    final out = output;
+    if (out == null) return null;
+    final format = (bitDepth: _settings.outputBitDepth, sampleRate: _settings.outputSampleRate);
+    final result = await out.apply(
+      device: _settings.outputDevice,
+      bitDepth: format.bitDepth,
+      sampleRate: format.sampleRate,
+      usbExclusive: _settings.usbExclusive,
+    );
+    final previous = _appliedFormat;
+    _appliedFormat = format;
+    if (previous != null && previous != format) await _rebuildEngine();
+    return result;
+  }
+
+  Future<void> _rebuildEngine() async {
+    final resume = isPlaying;
+    final at = _position;
+    await _engine.rebuild();
+    await _engine.setVolume(_volume);
+    if (current != null) {
+      await _load(_index, startAt: at, autoplay: resume, keepLyrics: true);
+    }
+  }
 
   /// 取播放地址、加载音频失败时的重试间隔，重试次数就是它的长度。
   final List<Duration> retryDelays;
@@ -646,7 +693,8 @@ class PlayerController extends ChangeNotifier {
 
     try {
       final cache = this.cache;
-      final preferred = _settings.preferredQuality;
+      final preferred = await _preferredQuality();
+      if (token != _token) return;
       // 缓存里有就直接放本地文件，一个请求都不发（离线也能放）。
       final cached = cache == null ? null : await cache.lookup(song.id, preferred);
       if (token != _token) return;
@@ -901,9 +949,13 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> seekBy(Duration delta) => seek(_position + delta);
 
-  /// 切换音质并设为默认。保持进度和播放状态。
+  /// 切换音质并设为默认（移动网络下设为移动网络音质）。保持进度和播放状态。
   Future<void> setQuality(AudioQuality q) {
-    _settings.preferredQuality = q;
+    if (_onCellular) {
+      _settings.mobileQuality = q;
+    } else {
+      _settings.preferredQuality = q;
+    }
     if (current == null || q == _quality) return Future.value();
     return _load(_index, startAt: _position, autoplay: isPlaying, keepLyrics: true);
   }

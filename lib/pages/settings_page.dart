@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../app/app.dart';
 import '../app/app_info.dart';
 import '../audio/audio_cache.dart';
+import '../audio/audio_output.dart';
 import '../audio/system_media.dart';
 import '../data/format.dart';
 import '../data/models.dart';
 import '../state/account_controller.dart';
+import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/share.dart';
 import 'login_page.dart';
@@ -56,7 +58,24 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
           ),
+          ListTile(
+            leading: const Icon(Icons.signal_cellular_alt_rounded),
+            title: const Text('移动网络播放音质'),
+            subtitle: const Text('用流量时请求这一档，省流量'),
+            trailing: DropdownButton<AudioQuality?>(
+              value: settings.mobileQuality,
+              underline: const SizedBox.shrink(),
+              onChanged: (q) => settings.mobileQuality = q,
+              items: [
+                const DropdownMenuItem(child: Text('同默认音质')),
+                for (final q in AudioQuality.values)
+                  DropdownMenuItem(value: q, child: Text(q.label)),
+              ],
+            ),
+          ),
           const _NotificationTile(),
+          const _Header('音频输出'),
+          const _OutputTiles(),
           const _Header('歌词'),
           ListTile(
             leading: const Icon(Icons.lyrics_outlined),
@@ -467,6 +486,135 @@ class _Header extends StatelessWidget {
         title,
         style: TextStyle(color: context.colors.accent, fontWeight: FontWeight.w700),
       ),
+    );
+  }
+}
+
+/// 音频输出：输出通道、位深、采样率、USB DAC 独占。改了立即应用。
+class _OutputTiles extends StatelessWidget {
+  const _OutputTiles();
+
+  Future<void> _apply(BuildContext context) async {
+    final settings = AppScope.of(context).settings;
+    final result = await PlayerScope.read(context).applyOutput();
+    if (result == null) return;
+    if (settings.usbExclusive && result.exclusive != ExclusiveState.on) {
+      AppScope.toast(result.exclusive.message);
+    } else if (!result.deviceFound) {
+      AppScope.toast('没找到这个输出设备，先交给系统选择');
+    }
+  }
+
+  Future<void> _pickDevice(BuildContext context) async {
+    final settings = AppScope.of(context).settings;
+    final devices = await PlayerScope.read(context).output?.devices() ?? const [];
+    if (!context.mounted) return;
+    final current = settings.outputDevice;
+    final picked = await showModalBottomSheet<(AudioOutputDevice?,)>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.auto_mode_rounded),
+                title: const Text('系统默认'),
+                subtitle: const Text('跟随系统，插拔耳机自动切换'),
+                trailing: current == null ? const Icon(Icons.check_rounded) : null,
+                onTap: () => Navigator.of(context).pop((null,)),
+              ),
+              for (final d in {...devices, ?current})
+                ListTile(
+                  leading: Icon(_deviceIcon(d.type)),
+                  title: Text(d.label),
+                  subtitle: devices.contains(d) ? null : const Text('未连接'),
+                  trailing: d == current ? const Icon(Icons.check_rounded) : null,
+                  onTap: () => Navigator.of(context).pop((d,)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !context.mounted) return;
+    settings.outputDevice = picked.$1;
+    await _apply(context);
+  }
+
+  static IconData _deviceIcon(int type) => switch (type) {
+    2 => Icons.speaker_phone_rounded,
+    3 || 4 => Icons.headphones_rounded,
+    8 || 26 || 27 => Icons.bluetooth_audio_rounded,
+    11 || 12 || 22 => Icons.usb_rounded,
+    9 || 10 => Icons.tv_rounded,
+    _ => Icons.speaker_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppScope.of(context).settings;
+    final float = settings.outputBitDepth.float;
+    return Column(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.speaker_group_rounded),
+          title: const Text('输出通道'),
+          subtitle: Text(settings.outputDevice?.label ?? '系统默认'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => _pickDevice(context),
+        ),
+        ListTile(
+          leading: const Icon(Icons.graphic_eq_rounded),
+          title: const Text('输出位深'),
+          subtitle: const Text('32 位浮点只对 24 位以上的音源生效'),
+          trailing: DropdownButton<OutputBitDepth>(
+            value: settings.outputBitDepth,
+            underline: const SizedBox.shrink(),
+            onChanged: (v) {
+              if (v == null) return;
+              settings.outputBitDepth = v;
+              _apply(context);
+            },
+            items: [
+              for (final v in OutputBitDepth.values)
+                DropdownMenuItem(value: v, child: Text(v.label)),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.waves_rounded),
+          title: const Text('输出采样率'),
+          subtitle: Text(float ? '32 位浮点输出时跟随音源' : '不跟随音源时由播放器重采样'),
+          enabled: !float,
+          trailing: DropdownButton<int>(
+            value: float ? 0 : settings.outputSampleRate,
+            underline: const SizedBox.shrink(),
+            onChanged: float
+                ? null
+                : (v) {
+                    if (v == null) return;
+                    settings.outputSampleRate = v;
+                    _apply(context);
+                  },
+            items: [
+              for (final r in AudioOutput.sampleRates)
+                DropdownMenuItem(value: r, child: Text(AudioOutput.sampleRateLabel(r))),
+            ],
+          ),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.usb_rounded),
+          title: const Text('USB DAC 独占模式'),
+          subtitle: const Text('绕过系统混音直通 DAC（bit-perfect）。需要 Android 14+，其他应用的声音会被静音'),
+          value: settings.usbExclusive,
+          onChanged: (v) {
+            settings.usbExclusive = v;
+            _apply(context);
+          },
+        ),
+      ],
     );
   }
 }
