@@ -45,7 +45,7 @@ class _NewSongsPageState extends State<NewSongsPage> {
                     child: ChoiceChip(
                       label: Text(a.$1),
                       selected: a == area,
-                      selectedColor: AppColors.accent.withValues(alpha: 0.25),
+                      selectedColor: context.colors.accent.withValues(alpha: 0.25),
                       onSelected: (_) => setState(() => _area = a),
                     ),
                   ),

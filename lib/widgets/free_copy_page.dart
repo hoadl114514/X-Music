@@ -63,21 +63,21 @@ class _FreeCopyPageState extends State<FreeCopyPage> {
   Widget build(BuildContext context) {
     final selected = _hasSelection ? _selection.textInside(_controller.text).characters.length : 0;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         title: Text(widget.title),
         actions: [TextButton(onPressed: _selectAll, child: const Text('全选'))],
       ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 '长按或双击文字开始选择，拖动两端调整范围',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: TextStyle(fontSize: 12, color: context.colors.textMuted),
               ),
             ),
           ),
@@ -93,7 +93,7 @@ class _FreeCopyPageState extends State<FreeCopyPage> {
               textAlignVertical: TextAlignVertical.top,
               keyboardType: TextInputType.multiline,
               enableInteractiveSelection: true,
-              style: const TextStyle(fontSize: 17, height: 1.6, color: AppColors.textPrimary),
+              style: TextStyle(fontSize: 17, height: 1.6, color: context.colors.textPrimary),
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -120,9 +120,9 @@ class _FreeCopyPageState extends State<FreeCopyPage> {
           SafeArea(
             top: false,
             child: Container(
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceHigh,
-                border: Border(top: BorderSide(color: AppColors.border)),
+              decoration: BoxDecoration(
+                color: context.colors.surfaceHigh,
+                border: Border(top: BorderSide(color: context.colors.border)),
               ),
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Row(
@@ -130,7 +130,7 @@ class _FreeCopyPageState extends State<FreeCopyPage> {
                   Expanded(
                     child: Text(
                       _hasSelection ? '已选 $selected 字' : '未选择，复制全部',
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                     ),
                   ),
                   FilledButton.icon(
@@ -138,8 +138,8 @@ class _FreeCopyPageState extends State<FreeCopyPage> {
                     icon: const Icon(Icons.copy_rounded, size: 18),
                     label: Text(_hasSelection ? '复制所选' : '复制全部'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: AppColors.onAccent,
+                      backgroundColor: context.colors.accent,
+                      foregroundColor: context.colors.onAccent,
                     ),
                   ),
                 ],

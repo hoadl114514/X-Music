@@ -45,8 +45,8 @@ class _ArtistAllSongsState extends State<ArtistAllSongs> with AutomaticKeepAlive
               icon: const Icon(Icons.play_arrow_rounded),
               label: const Text('播放全部'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: AppColors.onAccent,
+                backgroundColor: context.colors.accent,
+                foregroundColor: context.colors.onAccent,
               ),
             ),
             const SizedBox(width: 12),
@@ -55,7 +55,7 @@ class _ArtistAllSongsState extends State<ArtistAllSongs> with AutomaticKeepAlive
                 tracks.isEmpty ? '' : '共 ${tracks.length} 首',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
               ),
             ),
             SegmentedButton<bool>(
@@ -149,8 +149,8 @@ class _ArtistAlbumsState extends State<ArtistAlbums> with AutomaticKeepAliveClie
     }
     if (_albums.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
     if (_albums.isEmpty) {
-      return const Center(
-        child: Text('没有专辑', style: TextStyle(color: AppColors.textSecondary)),
+      return Center(
+        child: Text('没有专辑', style: TextStyle(color: context.colors.textSecondary)),
       );
     }
     final shown = _query.isEmpty
@@ -184,10 +184,10 @@ class _ArtistAlbumsState extends State<ArtistAlbums> with AutomaticKeepAliveClie
               );
             }
             if (_query.isNotEmpty && shown.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(32),
+              return Padding(
+                padding: const EdgeInsets.all(32),
                 child: Center(
-                  child: Text('没有匹配的专辑', style: TextStyle(color: AppColors.textSecondary)),
+                  child: Text('没有匹配的专辑', style: TextStyle(color: context.colors.textSecondary)),
                 ),
               );
             }
@@ -238,7 +238,7 @@ class _ArtistIntroState extends State<ArtistIntro> {
 
   @override
   Widget build(BuildContext context) {
-    const body = TextStyle(fontSize: 13, height: 1.6, color: AppColors.textSecondary);
+    final body = TextStyle(fontSize: 13, height: 1.6, color: context.colors.textSecondary);
     return InkWell(
       onTap: _toggle,
       child: Padding(
@@ -294,12 +294,12 @@ class _ArtistIntroState extends State<ArtistIntro> {
                   children: [
                     Text(
                       _expanded ? '收起' : '展开',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                     ),
                     Icon(
                       _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                       size: 18,
-                      color: AppColors.textMuted,
+                      color: context.colors.textMuted,
                     ),
                   ],
                 ),
@@ -344,7 +344,7 @@ class AlbumTile extends StatelessWidget {
         ].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       ),
       onTap: () => openAlbum(context, a.id, name: a.name),
     );

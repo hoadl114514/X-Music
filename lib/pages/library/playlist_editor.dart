@@ -72,7 +72,7 @@ class _CreateDialogState extends State<_CreateDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       title: const Text('新建歌单'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -91,7 +91,7 @@ class _CreateDialogState extends State<_CreateDialog> {
             value: _private,
             onChanged: _busy ? null : (v) => setState(() => _private = v ?? false),
             title: const Text('设为隐私歌单'),
-            subtitle: const Text('只有自己能看到', style: TextStyle(color: AppColors.textMuted)),
+            subtitle: Text('只有自己能看到', style: TextStyle(color: context.colors.textMuted)),
           ),
         ],
       ),
@@ -123,7 +123,7 @@ Future<void> showPlaylistManageSheet(
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.surfaceHigh,
+    backgroundColor: context.colors.surfaceHigh,
     showDragHandle: true,
     builder: (sheet) {
       void then(Future<void> Function(BuildContext context) action) {
@@ -137,19 +137,19 @@ Future<void> showPlaylistManageSheet(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
+              leading: Icon(Icons.edit_outlined, color: context.colors.textPrimary),
               title: const Text('编辑歌单信息'),
               subtitle: const Text('名称、简介、封面'),
               onTap: () => then((c) => PlaylistEditPage.open(c, playlist)),
             ),
             ListTile(
-              leading: const Icon(Icons.campaign_outlined, color: AppColors.textPrimary),
+              leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
               title: const Text('分享到动态'),
               onTap: () => then((c) => ComposeEventPage.open(c, playlist: playlist)),
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: AppColors.negative),
-              title: const Text('删除歌单', style: TextStyle(color: AppColors.negative)),
+              leading: Icon(Icons.delete_outline_rounded, color: context.colors.negative),
+              title: Text('删除歌单', style: TextStyle(color: context.colors.negative)),
               onTap: () => then((c) async {
                 if (await deletePlaylistWithConfirm(c, playlist)) onDeleted?.call();
               }),
@@ -167,13 +167,13 @@ Future<bool> deletePlaylistWithConfirm(BuildContext context, Playlist playlist) 
   final ok = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       title: const Text('删除歌单'),
       content: Text('确定删除「${playlist.name}」？删除后无法恢复。'),
       actions: [
         TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('取消')),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+          style: FilledButton.styleFrom(backgroundColor: context.colors.negative),
           onPressed: () => Navigator.of(c).pop(true),
           child: const Text('删除'),
         ),

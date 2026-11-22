@@ -20,7 +20,7 @@ class PlayerBar extends StatelessWidget {
   const PlayerBar({super.key});
 
   /// 卡片高度。
-  static const double height = 56;
+  static const double height = 64;
 
   @override
   Widget build(BuildContext context) {
@@ -28,14 +28,17 @@ class PlayerBar extends StatelessWidget {
     final song = player.current;
     if (song == null) return const SizedBox.shrink();
 
+    // 用封面主色做种子生成一套 M3 配色，卡片取它的 primaryContainer，浅色 / 深色都协调。
+    final cover = coverScheme(backdropColorFor(player.palette), Theme.of(context).brightness);
+    final fg = cover.onPrimaryContainer;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         height: height,
         decoration: BoxDecoration(
-          color: backdropColorFor(player.palette),
-          borderRadius: BorderRadius.circular(AppRadius.card),
+          color: cover.primaryContainer,
+          borderRadius: BorderRadius.circular(AppRadius.panel),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
@@ -43,7 +46,7 @@ class PlayerBar extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             Padding(
-              padding: const EdgeInsets.only(left: 8, right: 4),
+              padding: const EdgeInsets.only(left: 8, right: 6),
               child: Row(
                 children: [
                   Expanded(
@@ -54,6 +57,7 @@ class PlayerBar extends StatelessWidget {
                       onPrevious: () => player.previous(restart: false),
                       onNext: player.next,
                       onTap: () => openNowPlaying(context),
+                      color: fg,
                     ),
                   ),
                   RoundIconButton(
@@ -62,21 +66,23 @@ class PlayerBar extends StatelessWidget {
                     tooltip: '歌词',
                     size: 40,
                     iconSize: 22,
-                    color: Colors.white,
+                    color: fg,
                   ),
-                  LikeButton(songId: song.id, color: Colors.white),
+                  LikeButton(songId: song.id, color: fg),
                   RoundIconButton(
                     icon: player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                     onPressed: player.toggle,
                     tooltip: player.isPlaying ? '暂停' : '播放',
                     size: 44,
-                    iconSize: 30,
-                    color: Colors.white,
+                    iconSize: 28,
+                    filled: true,
+                    background: cover.primary,
+                    color: cover.onPrimary,
                   ),
                 ],
               ),
             ),
-            const Positioned(left: 8, right: 8, bottom: 0, child: _ProgressLine()),
+            Positioned(left: 16, right: 16, bottom: 0, child: _ProgressLine(color: cover.primary)),
           ],
         ),
       ),
@@ -97,31 +103,21 @@ class FloatingBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nav = navigation;
-    return DecoratedBox(
+    final scheme = context.scheme;
+    // 有导航栏时渐变的终点用导航栏的底色，播放条和导航栏连成一体。
+    final end = nav == null ? scheme.surface : scheme.surfaceContainer;
+    final bar = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            AppColors.background.withValues(alpha: 0),
-            AppColors.background.withValues(alpha: nav == null ? 0.6 : 0.85),
-            AppColors.background.withValues(alpha: 0.95),
-          ],
-          stops: const [0, 0.45, 1],
+          colors: [end.withValues(alpha: 0), end.withValues(alpha: 0.85), end],
+          stops: const [0, 0.4, 1],
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (nav == null)
-            const SafeArea(top: false, child: PlayerBar())
-          else ...[
-            const PlayerBar(),
-            nav,
-          ],
-        ],
-      ),
+      child: nav == null ? const SafeArea(top: false, child: PlayerBar()) : const PlayerBar(),
     );
+    return Column(mainAxisSize: MainAxisSize.min, children: [bar, ?nav]);
   }
 }
 
@@ -134,7 +130,9 @@ double floatingBarsInset(BuildContext context) => MediaQuery.paddingOf(context).
 /// 卡片底边的细进度线，只显示不响应手势（拖动进度到播放页里操作）。
 /// 迷你播放条底部的进度线。自己订阅进度，播放时只重建这一小块。
 class _ProgressLine extends StatelessWidget {
-  const _ProgressLine();
+  const _ProgressLine({required this.color});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -142,15 +140,15 @@ class _ProgressLine extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(1),
       child: SizedBox(
-        height: 2,
+        height: 3,
         child: ColoredBox(
-          color: Colors.white.withValues(alpha: 0.2),
+          color: color.withValues(alpha: 0.2),
           child: Align(
             alignment: Alignment.centerLeft,
             child: FractionallySizedBox(
               widthFactor: fraction.clamp(0.0, 1.0),
               heightFactor: 1,
-              child: const ColoredBox(color: Colors.white),
+              child: ColoredBox(color: color),
             ),
           ),
         ),
@@ -161,9 +159,10 @@ class _ProgressLine extends StatelessWidget {
 
 /// 迷你播放条里的一首歌：封面 + 歌名 + 歌手。[hero] 只给当前这首，和播放页的封面衔接。
 class _SongInfo extends StatelessWidget {
-  const _SongInfo({required this.song, this.hero = false});
+  const _SongInfo({required this.song, required this.color, this.hero = false});
 
   final Song song;
+  final Color color;
   final bool hero;
 
   @override
@@ -172,15 +171,15 @@ class _SongInfo extends StatelessWidget {
       palette: song.palette,
       seed: song.id,
       imageUrl: song.coverUrl,
-      radius: 4,
+      radius: AppRadius.small,
     );
     return Row(
       children: [
         SizedBox.square(
-          dimension: 40,
+          dimension: 48,
           child: hero ? Hero(tag: 'now-playing-cover', child: cover) : cover,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -190,14 +189,14 @@ class _SongInfo extends StatelessWidget {
                 song.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
               ),
               const SizedBox(height: 1),
               Text(
                 song.artist,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.7)),
+                style: TextStyle(fontSize: 12.5, color: color.withValues(alpha: 0.72)),
               ),
             ],
           ),
@@ -219,9 +218,11 @@ class _SwipeToSkip extends StatefulWidget {
     required this.onPrevious,
     required this.onNext,
     required this.onTap,
+    required this.color,
   });
 
   final Song current;
+  final Color color;
   final Song? previous;
   final Song? next;
   final VoidCallback onPrevious;
@@ -336,7 +337,7 @@ class _SwipeToSkipState extends State<_SwipeToSkip> with SingleTickerProviderSta
           width: _width,
           top: 0,
           bottom: 0,
-          child: _SongInfo(song: song, hero: hero),
+          child: _SongInfo(song: song, hero: hero, color: widget.color),
         );
         return GestureDetector(
           behavior: HitTestBehavior.translucent,
@@ -372,4 +373,19 @@ class _SwipeToSkipState extends State<_SwipeToSkip> with SingleTickerProviderSta
       },
     );
   }
+}
+
+final _coverSchemes = <(int, Brightness), ColorScheme>{};
+
+/// 以封面主色为种子的 M3 配色。按颜色缓存，切歌回到听过的封面不用重新算。
+ColorScheme coverScheme(Color seed, Brightness brightness) {
+  if (_coverSchemes.length > 64) _coverSchemes.clear();
+  return _coverSchemes.putIfAbsent(
+    (seed.toARGB32(), brightness),
+    () => ColorScheme.fromSeed(
+      seedColor: seed,
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
+    ),
+  );
 }

@@ -116,7 +116,7 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
       label: Text(subscribed ? '已收藏' : '收藏'),
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
-        side: const BorderSide(color: AppColors.outline),
+        side: BorderSide(color: context.colors.outline),
       ),
     );
   }

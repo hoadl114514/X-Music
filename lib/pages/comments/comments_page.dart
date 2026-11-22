@@ -177,7 +177,7 @@ class _ResourceHeader extends StatelessWidget {
                       s,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                     ),
                 ],
               ),
@@ -298,7 +298,7 @@ class _CommentListState extends State<_CommentList> with AutomaticKeepAliveClien
           physics: const AlwaysScrollableScrollPhysics(),
           itemCount: _items.length + 1,
           separatorBuilder: (_, i) => i < _items.length - 1
-              ? const Divider(height: 1, indent: 64, color: AppColors.border)
+              ? Divider(height: 1, indent: 64, color: context.colors.border)
               : const SizedBox.shrink(),
           itemBuilder: (context, i) {
             if (i == _items.length) {
@@ -345,7 +345,7 @@ class _ListFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(color: AppColors.textMuted);
+    final style = TextStyle(color: context.colors.textMuted);
     final Widget child;
     if (loading) {
       child = const SizedBox.square(
@@ -355,9 +355,9 @@ class _ListFooter extends StatelessWidget {
     } else if (error != null) {
       child = TextButton(onPressed: onRetry, child: Text('$error，点击重试'));
     } else if (empty) {
-      child = const Text('还没有评论，来抢沙发吧 ~', style: style);
+      child = Text('还没有评论，来抢沙发吧 ~', style: style);
     } else if (done) {
-      child = const Text('没有更多了', style: style);
+      child = Text('没有更多了', style: style);
     } else {
       child = const SizedBox.shrink();
     }
@@ -451,14 +451,14 @@ class _CommentTileState extends State<CommentTile> {
     final mine = AccountScope.read(context).profile?.userId == c.user.userId;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       showDragHandle: true,
       builder: (sheet) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.copy_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.copy_rounded, color: context.colors.textPrimary),
               title: const Text('复制评论'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -467,7 +467,7 @@ class _CommentTileState extends State<CommentTile> {
             ),
             freeCopyTile(sheet, c.content, label: '评论'),
             ListTile(
-              leading: const Icon(Icons.person_outline_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.person_outline_rounded, color: context.colors.textPrimary),
               title: Text('复制昵称：${c.user.nickname}', maxLines: 1, overflow: TextOverflow.ellipsis),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -475,7 +475,7 @@ class _CommentTileState extends State<CommentTile> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.reply_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.reply_rounded, color: context.colors.textPrimary),
               title: const Text('回复'),
               onTap: () {
                 Navigator.of(sheet).pop();
@@ -484,8 +484,8 @@ class _CommentTileState extends State<CommentTile> {
             ),
             if (mine)
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: AppColors.negative),
-                title: const Text('删除', style: TextStyle(color: AppColors.negative)),
+                leading: Icon(Icons.delete_outline_rounded, color: context.colors.negative),
+                title: Text('删除', style: TextStyle(color: context.colors.negative)),
                 onTap: () {
                   Navigator.of(sheet).pop();
                   _delete();
@@ -550,15 +550,12 @@ class _CommentTileState extends State<CommentTile> {
                                 c.user.nickname,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary,
-                                ),
+                                style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                               ),
                             ),
                             Text(
                               [formatCommentTime(c.time), ?c.location].join(' · '),
-                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              style: TextStyle(fontSize: 11, color: context.colors.textMuted),
                             ),
                           ],
                         ),
@@ -575,7 +572,7 @@ class _CommentTileState extends State<CommentTile> {
                           if (showReply)
                             TextSpan(
                               text: '回复 @${reply.nickname}：',
-                              style: const TextStyle(color: AppColors.accent),
+                              style: TextStyle(color: context.colors.accent),
                             ),
                           TextSpan(text: c.content),
                         ],
@@ -588,14 +585,14 @@ class _CommentTileState extends State<CommentTile> {
                       margin: const EdgeInsets.only(top: 8, right: 8),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: context.colors.card,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         '@${reply.nickname}：${reply.content}',
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                       ),
                     ),
                   if (widget.onOpenReplies case final open?)
@@ -608,7 +605,7 @@ class _CommentTileState extends State<CommentTile> {
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Text(
                             '${formatPlayCount(c.replyCount)} 条回复 >',
-                            style: const TextStyle(fontSize: 13, color: AppColors.accent),
+                            style: TextStyle(fontSize: 13, color: context.colors.accent),
                           ),
                         ),
                       ),
@@ -632,7 +629,7 @@ class _LikeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = liked ? AppColors.accent : AppColors.textMuted;
+    final color = liked ? context.colors.accent : context.colors.textMuted;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -666,7 +663,7 @@ Future<void> showFloorSheet(
   required ValueChanged<Comment> onChanged,
 }) => showModalBottomSheet<void>(
   context: context,
-  backgroundColor: AppColors.surface,
+  backgroundColor: context.colors.surface,
   showDragHandle: true,
   isScrollControlled: true,
   builder: (_) => _FloorSheet(threadId: threadId, parent: parent, onParentChanged: onChanged),
@@ -769,11 +766,11 @@ class _FloorSheetState extends State<_FloorSheet> {
                       );
                     }
                     if (i == 1) {
-                      return const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                         child: Text(
                           '全部回复',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                         ),
                       );
                     }
@@ -883,9 +880,9 @@ class _ComposerState extends State<_Composer> {
   Widget build(BuildContext context) {
     final target = _target;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceHigh,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: context.colors.surfaceHigh,
+        border: Border(top: BorderSide(color: context.colors.border)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
       // 评论页不显示播放条，输入框直接贴底，要自己避开系统手势条。
@@ -913,7 +910,7 @@ class _ComposerState extends State<_Composer> {
             if (_replyTo != null)
               IconButton(
                 tooltip: '取消回复',
-                icon: const Icon(Icons.close_rounded, size: 18, color: AppColors.textMuted),
+                icon: Icon(Icons.close_rounded, size: 18, color: context.colors.textMuted),
                 onPressed: () => setState(() => _replyTo = null),
               ),
             ListenableBuilder(
@@ -926,7 +923,7 @@ class _ComposerState extends State<_Composer> {
                         dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.send_rounded, color: AppColors.accent),
+                    : Icon(Icons.send_rounded, color: context.colors.accent),
               ),
             ),
           ],

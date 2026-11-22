@@ -8,7 +8,6 @@ import '../state/account_controller.dart';
 import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cover_art.dart';
-import '../widgets/hover_builder.dart';
 import '../widgets/playlist_card.dart';
 import 'library/library_page.dart';
 import 'library/song_actions.dart';
@@ -247,8 +246,8 @@ class _SongRcmdSectionState extends State<_SongRcmdSection> {
     }
     if (items == null) return const Center(child: CircularProgressIndicator());
     if (items.isEmpty) {
-      return const Center(
-        child: Text('暂无推荐', style: TextStyle(color: AppColors.textSecondary)),
+      return Center(
+        child: Text('暂无推荐', style: TextStyle(color: context.colors.textSecondary)),
       );
     }
     final songs = [for (final i in items) i.song];
@@ -448,7 +447,7 @@ class _RadarCard extends StatelessWidget {
             p.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, height: 1.4, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 15, height: 1.4, color: context.colors.textPrimary),
           ),
         ],
       ),
@@ -508,15 +507,15 @@ class _SongRcmdRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: playing ? AppColors.accent : AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      color: playing ? context.colors.accent : context.colors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       if (liked) ...[
-                        const Icon(Icons.favorite_rounded, size: 14, color: AppColors.negative),
+                        Icon(Icons.favorite_rounded, size: 14, color: context.colors.negative),
                         const SizedBox(width: 4),
                       ],
                       if (badge != null) ...[
@@ -528,7 +527,7 @@ class _SongRcmdRow extends StatelessWidget {
                           song.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                         ),
                       ),
                     ],
@@ -540,7 +539,7 @@ class _SongRcmdRow extends StatelessWidget {
               tooltip: '播放',
               visualDensity: VisualDensity.compact,
               onPressed: play,
-              icon: const Icon(Icons.play_arrow_rounded, color: AppColors.textSecondary),
+              icon: Icon(Icons.play_arrow_rounded, color: context.colors.textSecondary),
             ),
           ],
         ),
@@ -549,7 +548,7 @@ class _SongRcmdRow extends StatelessWidget {
   }
 }
 
-/// 红色小标签：推荐理由（浅底）或音质（描边）。
+/// 小标签：推荐理由（tertiary 容器色）或音质（primary 描边）。
 class _RcmdBadge extends StatelessWidget {
   const _RcmdBadge(this.text, {required this.filled});
 
@@ -563,18 +562,20 @@ class _RcmdBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
-          color: filled ? AppColors.negative.withValues(alpha: 0.15) : null,
-          border: Border.all(color: AppColors.negative.withValues(alpha: filled ? 0.25 : 0.8)),
+          color: filled ? context.scheme.tertiaryContainer : null,
+          border: Border.all(
+            color: filled ? Colors.transparent : context.scheme.primary.withValues(alpha: 0.7),
+          ),
           borderRadius: BorderRadius.circular(AppRadius.tag),
         ),
         child: Text(
           text,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: AppColors.negative,
+            color: filled ? context.scheme.onTertiaryContainer : context.scheme.primary,
             height: 1.3,
           ),
         ),
@@ -588,20 +589,22 @@ class _Greeting extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(switch (AccountScope.of(context).profile) {
           final p? => '${greetingFor(DateTime.now())}，${p.nickname}',
           null => greetingFor(DateTime.now()),
-        }, style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 6),
-        const Text('由此开启好心情 ~', style: TextStyle(color: AppColors.textSecondary)),
+        }, style: text.headlineMedium?.copyWith(color: context.scheme.onSurface)),
+        const SizedBox(height: 4),
+        Text('由此开启好心情 ~', style: text.bodyLarge?.copyWith(color: context.scheme.onSurfaceVariant)),
       ],
     );
   }
 }
 
+/// 分区标题：M3 titleLarge，右侧可放按钮。
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.title, {this.trailing, this.maxLines = 1});
 
@@ -615,21 +618,13 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 4,
-          height: 22,
-          decoration: BoxDecoration(
-            color: AppColors.accent,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-        ),
-        const SizedBox(width: 10),
         Expanded(
           child: Text(
             title,
             maxLines: maxLines,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: context.scheme.onSurface),
           ),
         ),
         ?trailing,
@@ -638,27 +633,30 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-/// 卡片底：圆角深色面板，悬停变亮。
+/// M3 填充卡片：默认 surfaceContainerHighest 底，可换成别的容器色（如私人 FM 用 primaryContainer）。
 class _Panel extends StatelessWidget {
-  const _Panel({required this.child, this.padding = const EdgeInsets.all(16), this.onTap});
+  const _Panel({
+    required this.child,
+    this.padding = const EdgeInsets.all(12),
+    this.onTap,
+    this.color,
+  });
 
   final Widget child;
   final EdgeInsets padding;
   final VoidCallback? onTap;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return HoverBuilder(
-      onTap: onTap,
-      builder: (context, hovered) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: padding,
-        decoration: BoxDecoration(
-          color: hovered && onTap != null ? AppColors.cardHover : AppColors.card,
-          borderRadius: BorderRadius.circular(AppRadius.panel),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: child,
+    return Card(
+      color: color ?? context.scheme.surfaceContainerHighest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(AppRadius.panel)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(padding: padding, child: child),
       ),
     );
   }
@@ -689,12 +687,14 @@ class _ShortcutCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final text = Theme.of(context).textTheme;
     return _Panel(
       onTap: onTap,
       child: Row(
         children: [
           SizedBox(
-            width: 72,
+            width: 64,
             child: CoverArt(
               palette: palette,
               seed: seed,
@@ -703,29 +703,29 @@ class _ShortcutCard extends StatelessWidget {
               radius: AppRadius.card,
             ),
           ),
-          const SizedBox(width: 18),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(icon, size: 20, color: AppColors.accent),
+                    Icon(icon, size: 18, color: scheme.primary),
                     const SizedBox(width: 8),
-                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    Text(title, style: text.titleMedium?.copyWith(color: scheme.onSurface)),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
         ],
       ),
     );
@@ -794,15 +794,19 @@ class _PersonalFmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final player = PlayerScope.of(context);
+    final scheme = context.scheme;
+    final text = Theme.of(context).textTheme;
     // 正在放私人 FM：封面换成当前这首，点击打开播放页而不是重新开始。
     final playing = player.isRadio ? player.current : null;
+    final open = playing != null ? () => openNowPlaying(context) : () => _start(context);
     return _Panel(
-      padding: const EdgeInsets.all(20),
-      onTap: () => playing != null ? openNowPlaying(context) : _start(context),
+      color: scheme.primaryContainer,
+      padding: const EdgeInsets.all(16),
+      onTap: open,
       child: Row(
         children: [
           SizedBox(
-            width: 96,
+            width: 88,
             child: CoverArt(
               palette: playing?.palette ?? _fmPalette,
               seed: playing?.id ?? 'fm',
@@ -811,21 +815,29 @@ class _PersonalFmCard extends StatelessWidget {
               icon: playing == null ? Icons.radio_rounded : null,
             ),
           ),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [Text('私人 FM', style: Theme.of(context).textTheme.titleLarge)]),
-                const SizedBox(height: 6),
+                Text('私人 FM', style: text.titleLarge?.copyWith(color: scheme.onPrimaryContainer)),
+                const SizedBox(height: 4),
                 Text(
                   playing == null ? '根据你的口味连续播放' : '正在播放：${playing.title} - ${playing.artist}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: text.bodyMedium?.copyWith(
+                    color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
+                  ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            tooltip: playing != null ? '打开播放页' : '开始播放',
+            onPressed: open,
+            icon: Icon(playing != null ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded),
           ),
         ],
       ),

@@ -125,18 +125,18 @@ class _EventCardState extends State<EventCard> {
                             children: [
                               TextSpan(
                                 text: e.user.nickname,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                                  color: context.colors.textPrimary,
                                 ),
                               ),
                               if (e.action case final a?)
                                 TextSpan(
                                   text: '  $a',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.textSecondary,
+                                    color: context.colors.textSecondary,
                                   ),
                                 ),
                             ],
@@ -152,7 +152,7 @@ class _EventCardState extends State<EventCard> {
                         child: PopupMenuButton<void>(
                           padding: EdgeInsets.zero,
                           iconSize: 18,
-                          icon: const Icon(Icons.more_horiz_rounded, color: AppColors.textMuted),
+                          icon: Icon(Icons.more_horiz_rounded, color: context.colors.textMuted),
                           itemBuilder: (_) => [
                             PopupMenuItem(onTap: _delete, child: const Text('删除动态')),
                           ],
@@ -162,7 +162,7 @@ class _EventCardState extends State<EventCard> {
                 ),
                 Text(
                   formatCommentTime(e.time),
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                 ),
                 const SizedBox(height: 8),
                 EventBody(event: e),
@@ -249,7 +249,7 @@ class _Forwarded extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = event;
     return Material(
-      color: AppColors.surfaceHigh,
+      color: context.colors.surfaceHigh,
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Padding(
         padding: const EdgeInsets.all(10),
@@ -260,7 +260,7 @@ class _Forwarded extends StatelessWidget {
               onTap: () => openUser(context, e.user.userId, name: e.user.nickname),
               child: Text(
                 '@${e.user.nickname}${e.action == null ? '' : '  ${e.action}'}',
-                style: const TextStyle(fontSize: 13, color: AppColors.accent),
+                style: TextStyle(fontSize: 13, color: context.colors.accent),
               ),
             ),
             const SizedBox(height: 4),
@@ -287,9 +287,9 @@ class _Pictures extends StatelessWidget {
           image: retryImage(sizedImage(url, 600)),
           fit: fit,
           errorBuilder: (_, _, _) => Container(
-            color: AppColors.cardHover,
+            color: context.colors.cardHover,
             alignment: Alignment.center,
-            child: const Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
+            child: Icon(Icons.broken_image_outlined, color: context.colors.textMuted),
           ),
         ),
       ),
@@ -335,7 +335,7 @@ class _ResourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.card,
+      color: context.colors.card,
       borderRadius: BorderRadius.circular(AppRadius.card),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -363,12 +363,12 @@ class _ResourceCard extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                     ),
                   ],
                 ),
               ),
-              if (icon != null) Icon(icon, color: AppColors.textSecondary),
+              if (icon != null) Icon(icon, color: context.colors.textSecondary),
             ],
           ),
         ),
@@ -399,7 +399,7 @@ class _Actions extends StatelessWidget {
         _Action(
           icon: e.liked ? Icons.thumb_up_alt_rounded : Icons.thumb_up_alt_outlined,
           label: count(e.likedCount, '赞'),
-          color: e.liked ? AppColors.accent : null,
+          color: e.liked ? context.colors.accent : null,
           onTap: onLike,
         ),
       ],
@@ -417,7 +417,7 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.textSecondary;
+    final c = color ?? context.colors.textSecondary;
     return TextButton.icon(
       onPressed: onTap,
       style: TextButton.styleFrom(foregroundColor: c, visualDensity: VisualDensity.compact),

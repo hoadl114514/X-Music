@@ -61,7 +61,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
-                                color: i < 3 ? AppColors.accent : AppColors.textMuted,
+                                color: i < 3 ? context.colors.accent : context.colors.textMuted,
                               ),
                             ),
                             label: Text(w),

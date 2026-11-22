@@ -98,9 +98,7 @@ class _AppShellState extends State<AppShell> {
         if (!didPop) _go(Destination.forYou);
       },
       child: Scaffold(
-        drawer: AppDrawer(onSelect: _select),
-        // 抽屉打开时主界面压暗，和参考图一致。
-        drawerScrimColor: Colors.black54,
+        drawer: AppDrawer(onSelect: _select, selected: _current),
         body: SafeArea(
           bottom: false,
           child: Column(
@@ -130,15 +128,15 @@ class _AppShellState extends State<AppShell> {
         extendBody: true,
         bottomNavigationBar: FloatingBottomBar(
           navigation: NavigationBar(
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            elevation: 0,
             selectedIndex: _tab,
             onDestinationSelected: (i) => _go(Destination.tabs[i]),
             destinations: [
               for (final d in Destination.tabs)
-                NavigationDestination(icon: Icon(d.icon), label: d.shortLabel),
+                NavigationDestination(
+                  icon: Icon(d.outlinedIcon),
+                  selectedIcon: Icon(d.icon),
+                  label: d.shortLabel,
+                ),
             ],
           ),
         ),

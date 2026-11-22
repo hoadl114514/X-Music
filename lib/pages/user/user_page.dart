@@ -371,14 +371,14 @@ class _Header extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.verified_rounded, size: 14, color: AppColors.accent),
+                      Icon(Icons.verified_rounded, size: 14, color: context.colors.accent),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           id,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                         ),
                       ),
                     ],
@@ -396,8 +396,8 @@ class _Header extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               color: onTap == null
-                                  ? AppColors.textSecondary
-                                  : AppColors.textPrimary,
+                                  ? context.colors.textSecondary
+                                  : context.colors.textPrimary,
                             ),
                           ),
                         ),
@@ -410,7 +410,7 @@ class _Header extends StatelessWidget {
                     sig,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                   ),
                 ],
                 if (u != null && (self || d.status != null)) ...[
@@ -441,7 +441,7 @@ class _Header extends StatelessWidget {
                           ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
-                            side: const BorderSide(color: AppColors.outline),
+                            side: BorderSide(color: context.colors.outline),
                             visualDensity: VisualDensity.compact,
                           ),
                           child: const Text('私信'),
@@ -476,7 +476,7 @@ class _SectionTitle extends StatelessWidget {
           if (onMore != null)
             TextButton(
               onPressed: onMore,
-              style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+              style: TextButton.styleFrom(foregroundColor: context.colors.textSecondary),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [Text('查看全部'), Icon(Icons.chevron_right_rounded, size: 18)],
@@ -518,7 +518,7 @@ class _TasteTile extends StatelessWidget {
         ),
       ),
       title: Text(title),
-      subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textSecondary)),
+      subtitle: Text(subtitle, style: TextStyle(color: context.colors.textSecondary)),
       trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
       onTap: onTap,
     );
@@ -564,7 +564,7 @@ class _PlaylistSection extends StatelessWidget {
         if (list.isEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Text(empty, style: const TextStyle(color: AppColors.textMuted)),
+            child: Text(empty, style: TextStyle(color: context.colors.textMuted)),
           ),
         for (final p in list.take(_preview)) PlaylistTile(playlist: p),
       ],

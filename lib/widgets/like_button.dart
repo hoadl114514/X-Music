@@ -29,7 +29,7 @@ class LikeButton extends StatelessWidget {
     final liked = account.isLiked(songId);
     return RoundIconButton(
       icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-      color: liked ? AppColors.accent : color,
+      color: liked ? context.colors.accent : color,
       tooltip: liked ? '取消喜欢' : '喜欢',
       size: size,
       iconSize: iconSize,

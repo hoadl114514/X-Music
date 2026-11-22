@@ -93,11 +93,11 @@ class ConversationTile extends StatelessWidget {
         c.preview.replaceAll('\n', ' '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       ),
       trailing: Text(
         formatCommentTime(c.time),
-        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        style: TextStyle(fontSize: 12, color: context.colors.textMuted),
       ),
       onTap: onTap,
     );
@@ -142,10 +142,10 @@ Future<SocialUser?> pickFollowedUser(BuildContext context) async {
       builder: (context) => SubPage(
         title: '选择联系人',
         body: PagedListView<SocialUser>(
-          header: const [
+          header: [
             Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text('我的关注', style: TextStyle(color: AppColors.textSecondary)),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text('我的关注', style: TextStyle(color: context.colors.textSecondary)),
             ),
           ],
           empty: '还没有关注任何人',
@@ -304,7 +304,7 @@ class _ChatPageState extends State<ChatPage> {
                                 padding: const EdgeInsets.symmetric(vertical: 8),
                                 child: Text(
                                   formatCommentTime(m.time),
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                  style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                                 ),
                               ),
                             _Bubble(message: m, mine: m.fromUserId == me?.userId, peer: u),
@@ -331,7 +331,7 @@ class _ChatPageState extends State<ChatPage> {
                         hintText: '发私信给 ${u.nickname}',
                         isDense: true,
                         filled: true,
-                        fillColor: AppColors.surfaceHigh,
+                        fillColor: context.colors.surfaceHigh,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppRadius.panel),
                           borderSide: BorderSide.none,
@@ -349,7 +349,7 @@ class _ChatPageState extends State<ChatPage> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.send_rounded, color: AppColors.accent),
+                        : Icon(Icons.send_rounded, color: context.colors.accent),
                   ),
                 ],
               ),
@@ -373,10 +373,10 @@ class _ChatPageState extends State<ChatPage> {
       );
     }
     if (_messages.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(32),
+      return Padding(
+        padding: const EdgeInsets.all(32),
         child: Center(
-          child: Text('还没有聊过，打个招呼吧', style: TextStyle(color: AppColors.textMuted)),
+          child: Text('还没有聊过，打个招呼吧', style: TextStyle(color: context.colors.textMuted)),
         ),
       );
     }
@@ -404,14 +404,14 @@ class _Bubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
-                color: mine ? AppColors.accent : AppColors.cardHover,
+                color: mine ? context.colors.accent : context.colors.cardHover,
                 borderRadius: BorderRadius.circular(AppRadius.panel),
               ),
               child: Text(
                 m.text,
                 style: TextStyle(
                   fontSize: 15,
-                  color: mine ? AppColors.onAccent : AppColors.textPrimary,
+                  color: mine ? context.colors.onAccent : context.colors.textPrimary,
                 ),
               ),
             ),
@@ -502,7 +502,7 @@ class _SharedCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Material(
-        color: AppColors.card,
+        color: context.colors.card,
         borderRadius: BorderRadius.circular(AppRadius.panel),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -531,7 +531,7 @@ class _SharedCard extends StatelessWidget {
                         subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                     ],
                   ),

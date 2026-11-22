@@ -36,7 +36,17 @@ Route<void> slideUpRoute(Widget page) => PageRouteBuilder<void>(
 
 /// 打开播放页；[showLyrics] 为 true 时直接显示歌词。
 Future<void> openNowPlaying(BuildContext context, {bool showLyrics = false}) =>
-    Navigator.of(context).push(slideUpRoute(NowPlayingPage(initialLyrics: showLyrics)));
+    Navigator.of(context).push(
+      slideUpRoute(
+        // 播放页保持原来的沉浸式暗色，不跟主界面的浅色 / 动态取色走。
+        Theme(
+          data: _immersive,
+          child: NowPlayingPage(initialLyrics: showLyrics),
+        ),
+      ),
+    );
+
+final _immersive = AppTheme.immersive();
 
 /// 全屏播放页：流光背景，中间左右滑动在「封面」和「歌词」两页间切换（歌词在右边），
 /// 下方控制区两页共用。下滑收起。
@@ -70,7 +80,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
   Widget build(BuildContext context) {
     final player = PlayerScope.of(context);
     final song = player.current;
-    if (song == null) return const Scaffold(backgroundColor: AppColors.background);
+    if (song == null) return Scaffold(backgroundColor: context.colors.background);
 
     return Scaffold(
       backgroundColor: Colors.black,

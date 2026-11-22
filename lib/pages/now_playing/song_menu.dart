@@ -17,7 +17,7 @@ import 'lyrics_copy.dart';
 
 Future<void> _sheet(BuildContext context, Widget child) => showModalBottomSheet<void>(
   context: context,
-  backgroundColor: AppColors.surfaceHigh,
+  backgroundColor: context.colors.surfaceHigh,
   showDragHandle: true,
   isScrollControlled: true,
   builder: (_) => child,
@@ -61,8 +61,11 @@ class _AddToPlaylistSheet extends StatelessWidget {
             ),
             Expanded(
               child: own.isEmpty
-                  ? const Center(
-                      child: Text('还没有自己创建的歌单', style: TextStyle(color: AppColors.textSecondary)),
+                  ? Center(
+                      child: Text(
+                        '还没有自己创建的歌单',
+                        style: TextStyle(color: context.colors.textSecondary),
+                      ),
                     )
                   : ListView(
                       children: [
@@ -125,7 +128,7 @@ class _SleepSheet extends StatelessWidget {
             ),
           if (player.sleepAt != null)
             ListTile(
-              title: const Text('取消定时', style: TextStyle(color: AppColors.accent)),
+              title: Text('取消定时', style: TextStyle(color: context.colors.accent)),
               onTap: () => set(null),
             ),
           const SizedBox(height: 8),
@@ -180,7 +183,7 @@ class _SongMenu extends StatelessWidget {
                 subtitle: Text(song.artist),
                 trailing: IconButton(
                   tooltip: '复制歌名 / 歌手',
-                  icon: const Icon(Icons.copy_rounded, color: AppColors.textSecondary),
+                  icon: Icon(Icons.copy_rounded, color: context.colors.textSecondary),
                   onPressed: () {
                     final nav = Navigator.of(context);
                     nav.pop();
@@ -191,19 +194,19 @@ class _SongMenu extends StatelessWidget {
               ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.graphic_eq_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.graphic_eq_rounded, color: context.colors.textPrimary),
                 title: const Text('音质'),
                 subtitle: Text(
                   player.qualities.isEmpty ? '暂无可选音质' : '${player.qualities.length} 档可选',
                 ),
                 trailing: Text(
                   player.quality?.label ?? '—',
-                  style: const TextStyle(color: AppColors.accent),
+                  style: TextStyle(color: context.colors.accent),
                 ),
                 onTap: player.qualities.isEmpty ? null : () => showQualitySheet(context),
               ),
               ListTile(
-                leading: const Icon(Icons.lyrics_outlined, color: AppColors.textPrimary),
+                leading: Icon(Icons.lyrics_outlined, color: context.colors.textPrimary),
                 title: const Text('歌词来源'),
                 subtitle: Text(
                   player.lyricsLoading
@@ -232,20 +235,20 @@ class _SongMenu extends StatelessWidget {
               ),
               if (lyrics.hasTranslation)
                 SwitchListTile(
-                  secondary: const Icon(Icons.translate_rounded, color: AppColors.textPrimary),
+                  secondary: Icon(Icons.translate_rounded, color: context.colors.textPrimary),
                   title: const Text('显示翻译'),
                   value: settings.showTranslation,
                   onChanged: (v) => settings.showTranslation = v,
                 ),
               if (lyrics.hasRomaji)
                 SwitchListTile(
-                  secondary: const Icon(Icons.abc_rounded, color: AppColors.textPrimary),
+                  secondary: Icon(Icons.abc_rounded, color: context.colors.textPrimary),
                   title: const Text('显示罗马音'),
                   value: settings.showRomaji,
                   onChanged: (v) => settings.showRomaji = v,
                 ),
               ListTile(
-                leading: const Icon(Icons.av_timer_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.av_timer_rounded, color: context.colors.textPrimary),
                 title: const Text('歌词偏移'),
                 subtitle: const Text('歌词和声音对不上时调整'),
                 trailing: Row(
@@ -277,7 +280,7 @@ class _SongMenu extends StatelessWidget {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.copy_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.copy_rounded, color: context.colors.textPrimary),
                 title: const Text('复制当前歌词'),
                 enabled: active >= 0,
                 onTap: active < 0
@@ -294,7 +297,7 @@ class _SongMenu extends StatelessWidget {
                       },
               ),
               ListTile(
-                leading: const Icon(Icons.checklist_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.checklist_rounded, color: context.colors.textPrimary),
                 title: const Text('批量复制歌词'),
                 subtitle: const Text('也可以在歌词上长按'),
                 enabled: !lyrics.isEmpty,
@@ -314,7 +317,7 @@ class _SongMenu extends StatelessWidget {
               const Divider(),
               if (player.isRadio)
                 ListTile(
-                  leading: const Icon(Icons.thumb_down_outlined, color: AppColors.textPrimary),
+                  leading: Icon(Icons.thumb_down_outlined, color: context.colors.textPrimary),
                   title: const Text('不喜欢这首'),
                   subtitle: const Text('私人 FM 不再推荐，并跳到下一首'),
                   onTap: () => then(() async {
@@ -328,7 +331,7 @@ class _SongMenu extends StatelessWidget {
                   }),
                 ),
               ListTile(
-                leading: const Icon(Icons.mode_comment_outlined, color: AppColors.textPrimary),
+                leading: Icon(Icons.mode_comment_outlined, color: context.colors.textPrimary),
                 title: const Text('查看评论'),
                 onTap: () {
                   final nav = Navigator.of(context);
@@ -337,7 +340,7 @@ class _SongMenu extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.playlist_add_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.playlist_add_rounded, color: context.colors.textPrimary),
                 title: const Text('收藏到歌单'),
                 onTap: () {
                   final nav = Navigator.of(context);
@@ -346,7 +349,7 @@ class _SongMenu extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.campaign_outlined, color: AppColors.textPrimary),
+                leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
                 title: const Text('分享到动态'),
                 onTap: () {
                   final nav = Navigator.of(context);
@@ -355,7 +358,7 @@ class _SongMenu extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.person_outline_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.person_outline_rounded, color: context.colors.textPrimary),
                 title: const Text('查看歌手'),
                 subtitle: Text(song.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                 enabled: song.artists.isNotEmpty,
@@ -366,7 +369,7 @@ class _SongMenu extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.album_outlined, color: AppColors.textPrimary),
+                leading: Icon(Icons.album_outlined, color: context.colors.textPrimary),
                 title: const Text('查看专辑'),
                 subtitle: Text(song.album, maxLines: 1, overflow: TextOverflow.ellipsis),
                 enabled: song.albumId != null,
@@ -377,14 +380,14 @@ class _SongMenu extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.bedtime_outlined, color: AppColors.textPrimary),
+                leading: Icon(Icons.bedtime_outlined, color: context.colors.textPrimary),
                 title: const Text('定时关闭'),
                 trailing: sleepAt == null
                     ? null
                     : Text(
                         '${sleepAt.hour.toString().padLeft(2, '0')}:'
                         '${sleepAt.minute.toString().padLeft(2, '0')} 暂停',
-                        style: const TextStyle(color: AppColors.accent),
+                        style: TextStyle(color: context.colors.accent),
                       ),
                 onTap: () {
                   final nav = Navigator.of(context);
@@ -413,11 +416,11 @@ class _QualitySheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Text(
               '只显示这首歌提供的音质。账号权益不足时会自动降到可用的最高档。',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 12, color: context.colors.textMuted),
             ),
           ),
           for (final info in options)
@@ -425,7 +428,7 @@ class _QualitySheet extends StatelessWidget {
               title: Text(info.quality.label),
               subtitle: Text(_describe(info)),
               trailing: info.quality == player.quality
-                  ? const Icon(Icons.check_rounded, color: AppColors.accent)
+                  ? Icon(Icons.check_rounded, color: context.colors.accent)
                   : null,
               onTap: () {
                 Navigator.of(context).pop();
@@ -487,7 +490,7 @@ class _QueueSheetState extends State<_QueueSheet> {
                   const Spacer(),
                   Text(
                     player.queueTitle,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                   ),
                 ],
               ),
@@ -506,11 +509,13 @@ class _QueueSheetState extends State<_QueueSheet> {
                       s.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: current ? AppColors.accent : AppColors.textPrimary),
+                      style: TextStyle(
+                        color: current ? context.colors.accent : context.colors.textPrimary,
+                      ),
                     ),
                     subtitle: Text(s.artist, maxLines: 1, overflow: TextOverflow.ellipsis),
                     trailing: current
-                        ? const Icon(Icons.graphic_eq_rounded, color: AppColors.accent)
+                        ? Icon(Icons.graphic_eq_rounded, color: context.colors.accent)
                         : null,
                     onTap: () => player.jumpTo(i),
                     onLongPress: () => showCopySongSheet(context, s),

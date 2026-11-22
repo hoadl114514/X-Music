@@ -9,8 +9,8 @@ enum Destination {
   newSongs('新歌速递', '新歌', Icons.fiber_new_rounded),
   recent('最近播放', '最近', Icons.history_rounded),
   ranking('听歌排行', '排行', Icons.show_chart_rounded),
-  updates('我的动态', '动态', Icons.campaign_outlined),
-  settings('设置', '设置', Icons.settings_outlined);
+  updates('我的动态', '动态', Icons.campaign_rounded),
+  settings('设置', '设置', Icons.settings_rounded);
 
   const Destination(this.label, this.shortLabel, this.icon);
 
@@ -20,6 +20,19 @@ enum Destination {
   /// 底部导航用的短名。
   final String shortLabel;
   final IconData icon;
+
+  /// 未选中时的描边图标（M3：选中实心，未选中描边）。
+  IconData get outlinedIcon => switch (this) {
+    forYou => Icons.home_outlined,
+    discover => Icons.explore_outlined,
+    follow => Icons.people_alt_outlined,
+    library => Icons.library_music_outlined,
+    newSongs => Icons.fiber_new_outlined,
+    recent => Icons.history_rounded,
+    ranking => Icons.show_chart_rounded,
+    updates => Icons.campaign_outlined,
+    settings => Icons.settings_outlined,
+  };
 
   /// 抽屉侧栏里显示的名字：首页叫「首页」，其余用页面标题。
   String get drawerLabel => this == forYou ? shortLabel : label;

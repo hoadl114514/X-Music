@@ -16,7 +16,7 @@ Future<void> showLyricLineActions(BuildContext context, Song song, Lyrics lyrics
   final line = lyrics.lines[index];
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.surfaceHigh,
+    backgroundColor: context.colors.surfaceHigh,
     showDragHandle: true,
     builder: (sheet) {
       void copy(String text) {
@@ -37,18 +37,18 @@ Future<void> showLyricLineActions(BuildContext context, Song song, Lyrics lyrics
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.copy_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.copy_rounded, color: context.colors.textPrimary),
               title: const Text('复制这句'),
               onTap: () => copy(line.text),
             ),
             if (line.translation != null || line.romaji != null)
               ListTile(
-                leading: const Icon(Icons.translate_rounded, color: AppColors.textPrimary),
+                leading: Icon(Icons.translate_rounded, color: context.colors.textPrimary),
                 title: const Text('复制这句（含翻译 / 罗马音）'),
                 onTap: () => copy(lyricsText([line], translation: true, romaji: true)),
               ),
             ListTile(
-              leading: const Icon(Icons.checklist_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.checklist_rounded, color: context.colors.textPrimary),
               title: const Text('批量复制'),
               subtitle: const Text('选择多句歌词一起复制'),
               onTap: () {
@@ -58,7 +58,7 @@ Future<void> showLyricLineActions(BuildContext context, Song song, Lyrics lyrics
               },
             ),
             ListTile(
-              leading: const Icon(Icons.subject_rounded, color: AppColors.textPrimary),
+              leading: Icon(Icons.subject_rounded, color: context.colors.textPrimary),
               title: const Text('复制全部歌词'),
               onTap: () => copy(lyricsText(lyrics.lines)),
             ),
@@ -181,7 +181,7 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
                   onTap: () => _toggle(i),
                   onLongPress: () => _selectRange(i),
                   child: Container(
-                    color: on ? AppColors.accent.withValues(alpha: 0.12) : null,
+                    color: on ? context.colors.accent.withValues(alpha: 0.12) : null,
                     padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
                     child: Row(
                       children: [
@@ -196,22 +196,22 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
                                 style: TextStyle(
                                   fontSize: 15,
                                   color: line.text.isEmpty
-                                      ? AppColors.textMuted
-                                      : AppColors.textPrimary,
+                                      ? context.colors.textMuted
+                                      : context.colors.textPrimary,
                                 ),
                               ),
                               if (line.translation case final t? when _translation)
                                 Text(
                                   t,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.textSecondary,
+                                    color: context.colors.textSecondary,
                                   ),
                                 ),
                               if (line.romaji case final r? when _romaji)
                                 Text(
                                   r,
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                  style: TextStyle(fontSize: 12, color: context.colors.textMuted),
                                 ),
                             ],
                           ),
@@ -226,9 +226,9 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
           SafeArea(
             top: false,
             child: Container(
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceHigh,
-                border: Border(top: BorderSide(color: AppColors.border)),
+              decoration: BoxDecoration(
+                color: context.colors.surfaceHigh,
+                border: Border(top: BorderSide(color: context.colors.border)),
               ),
               padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
               child: Row(
@@ -253,8 +253,8 @@ class _LyricsCopyPageState extends State<LyricsCopyPage> {
                     icon: const Icon(Icons.copy_rounded, size: 18),
                     label: Text('复制${_selected.isEmpty ? '' : '（${_selected.length}）'}'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: AppColors.onAccent,
+                      backgroundColor: context.colors.accent,
+                      foregroundColor: context.colors.onAccent,
                     ),
                   ),
                 ],

@@ -31,7 +31,7 @@ class RoundIconButton extends StatelessWidget {
       dimension: size,
       child: Material(
         type: MaterialType.circle,
-        color: filled ? (background ?? AppColors.surfaceHigh) : Colors.transparent,
+        color: filled ? (background ?? context.colors.surfaceHigh) : Colors.transparent,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
@@ -39,7 +39,7 @@ class RoundIconButton extends StatelessWidget {
           child: Icon(
             icon,
             size: iconSize ?? size * 0.5,
-            color: color ?? (filled ? AppColors.textPrimary : AppColors.textSecondary),
+            color: color ?? (filled ? context.colors.textPrimary : context.colors.textSecondary),
           ),
         ),
       ),
