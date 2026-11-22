@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/client_identity.dart';
 import '../audio/audio_cache.dart';
 import '../data/models.dart';
+import '../theme/app_theme.dart';
 
 /// 本地设置，写入 SharedPreferences。
 ///
@@ -26,6 +28,9 @@ class AppSettings extends ChangeNotifier {
   static const _kSkippedUpdate = 'skipped_update';
   static const _kAudioCacheLimit = 'audio_cache_limit';
   static const _kDeviceId = 'device_id';
+  static const _kThemeMode = 'theme_mode';
+  static const _kDynamicColor = 'dynamic_color';
+  static const _kSeedColor = 'seed_color';
 
   /// 搜索历史最多保留几条。
   static const searchHistoryLimit = 20;
@@ -92,6 +97,18 @@ class AppSettings extends ChangeNotifier {
   /// 听歌缓存上限（字节），默认 5 GB。0 表示不缓存。
   int get audioCacheLimit => _prefs.getInt(_kAudioCacheLimit) ?? AudioCache.defaultLimit;
   set audioCacheLimit(int v) => _set(() => _prefs.setInt(_kAudioCacheLimit, v < 0 ? 0 : v));
+
+  /// 浅色 / 深色 / 跟随系统，默认跟随系统。
+  AppThemeMode get themeMode => AppThemeMode.byName(_prefs.getString(_kThemeMode));
+  set themeMode(AppThemeMode v) => _set(() => _prefs.setString(_kThemeMode, v.name));
+
+  /// 动态取色：Android 12 及以上按壁纸取色。系统不支持时自动改用 [seedColor]。
+  bool get dynamicColor => _prefs.getBool(_kDynamicColor) ?? true;
+  set dynamicColor(bool v) => _set(() => _prefs.setBool(_kDynamicColor, v));
+
+  /// 不用动态取色时的种子色，默认樱花粉。
+  Color get seedColor => Color(_prefs.getInt(_kSeedColor) ?? AppTheme.sakura.toARGB32());
+  set seedColor(Color v) => _set(() => _prefs.setInt(_kSeedColor, v.toARGB32()));
 
   /// SharedPreferences 的 set 会先更新内存缓存再异步落盘，所以读到的值立即是新的。
   void _set(Future<bool> Function() write) {

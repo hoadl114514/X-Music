@@ -1,3 +1,4 @@
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 
 import '../shell/app_shell.dart';
@@ -40,12 +41,29 @@ class _NeteaseClientAppState extends State<NeteaseClientApp> {
           controller: s.player,
           child: PlayerTickScope(
             controller: s.player,
-            child: MaterialApp(
-              title: AppInfo.name,
-              debugShowCheckedModeBanner: false,
-              theme: AppTheme.dark(),
-              scaffoldMessengerKey: AppScope.messengerKey,
-              home: const AppShell(),
+            child: DynamicColorBuilder(
+              builder: (lightDynamic, darkDynamic) => ListenableBuilder(
+                listenable: s.settings,
+                builder: (context, _) {
+                  final settings = s.settings;
+                  // 动态取色：用系统壁纸色的主色做种子，重新生成完整的 M3 配色（各级 surface 齐全）。
+                  AppScope._dynamicSupported = lightDynamic != null;
+                  final useDynamic = settings.dynamicColor && lightDynamic != null;
+                  final lightSeed = useDynamic ? lightDynamic.primary : settings.seedColor;
+                  final darkSeed = useDynamic
+                      ? (darkDynamic ?? lightDynamic).primary
+                      : settings.seedColor;
+                  return MaterialApp(
+                    title: AppInfo.name,
+                    debugShowCheckedModeBanner: false,
+                    theme: AppTheme.fromSeed(lightSeed, Brightness.light),
+                    darkTheme: AppTheme.fromSeed(darkSeed, Brightness.dark),
+                    themeMode: settings.themeMode.mode,
+                    scaffoldMessengerKey: AppScope.messengerKey,
+                    home: const AppShell(),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -73,6 +91,10 @@ class AppScope extends InheritedWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
   }
+
+  /// 系统是否提供动态取色（Android 12 及以上）。设置页据此显示开关。
+  static bool dynamicColorSupported(BuildContext context) => _dynamicSupported;
+  static bool _dynamicSupported = false;
 
   @override
   bool updateShouldNotify(AppScope old) => old.services != services;

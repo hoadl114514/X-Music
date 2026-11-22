@@ -7,6 +7,7 @@ import '../pages/library/playlist_page.dart';
 import '../theme/app_theme.dart';
 import 'cover_art.dart';
 import 'hover_builder.dart';
+import 'motion.dart';
 import 'round_icon_button.dart';
 import 'image_viewer.dart';
 
@@ -66,87 +67,89 @@ class PlaylistCard extends StatelessWidget {
     void open() =>
         Navigator.of(context)
             .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: playlist)));
-    return HoverBuilder(
-      onTap: open,
-      builder: (context, hovered) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AnimatedSlide(
-            offset: hovered ? const Offset(0, -0.02) : Offset.zero,
-            duration: const Duration(milliseconds: 180),
-            child: Stack(
-              children: [
-                ViewableImage(
-                  url: playlist.coverUrl,
-                  title: playlist.name,
-                  child: CoverArt(
-                    palette: playlist.palette,
-                    seed: playlist.id,
-                    imageUrl: playlist.coverUrl,
-                    fallbackImage: playlistCoverFallback(context, playlist),
-                    radius: AppRadius.panel,
-                    shadow: hovered ? AppShadows.heavy : null,
+    return PressScale(
+      child: HoverBuilder(
+        onTap: open,
+        builder: (context, hovered) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedSlide(
+              offset: hovered ? const Offset(0, -0.02) : Offset.zero,
+              duration: const Duration(milliseconds: 180),
+              child: Stack(
+                children: [
+                  ViewableImage(
+                    url: playlist.coverUrl,
+                    title: playlist.name,
+                    child: CoverArt(
+                      palette: playlist.palette,
+                      seed: playlist.id,
+                      imageUrl: playlist.coverUrl,
+                      fallbackImage: playlistCoverFallback(context, playlist),
+                      radius: AppRadius.panel,
+                      shadow: hovered ? AppShadows.heavy : null,
+                    ),
                   ),
-                ),
-                // 右上角播放量，下面垫一层渐变保证可读。
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 10, 16),
-                    decoration: const BoxDecoration(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.panel)),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x66000000), Color(0x00000000)],
+                  // 右上角播放量，下面垫一层渐变保证可读。
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 10, 16),
+                      decoration: const BoxDecoration(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.panel)),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x66000000), Color(0x00000000)],
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.white),
+                          Text(
+                            formatPlayCount(playlist.playCount),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.white),
-                        Text(
-                          formatPlayCount(playlist.playCount),
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                        ),
-                      ],
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: AnimatedOpacity(
+                      opacity: hovered ? 1 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      child: RoundIconButton(
+                        icon: Icons.play_arrow_rounded,
+                        onPressed: hovered ? open : null,
+                        size: 44,
+                        iconSize: 26,
+                        filled: true,
+                        background: context.scheme.primaryContainer,
+                        color: context.scheme.onPrimaryContainer,
+                      ),
                     ),
                   ),
-                ),
-                Positioned(
-                  right: 10,
-                  bottom: 10,
-                  child: AnimatedOpacity(
-                    opacity: hovered ? 1 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: RoundIconButton(
-                      icon: Icons.play_arrow_rounded,
-                      onPressed: hovered ? open : null,
-                      size: 44,
-                      iconSize: 26,
-                      filled: true,
-                      background: AppColors.accent,
-                      color: AppColors.onAccent,
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            playlist.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              color: hovered ? AppColors.textPrimary : AppColors.textSecondary,
+            const SizedBox(height: 10),
+            Text(
+              playlist.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: hovered ? context.colors.textPrimary : context.colors.textSecondary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -187,7 +190,7 @@ class PlaylistTile extends StatelessWidget {
             seed: p.id,
             imageUrl: p.coverUrl,
             fallbackImage: playlistCoverFallback(context, p),
-            radius: 6,
+            radius: AppRadius.small,
           ),
         ),
       ),
@@ -196,7 +199,7 @@ class PlaylistTile extends StatelessWidget {
         subtitle ?? ['${p.trackCount} 首', ?p.creator].join(' · '),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       ),
       trailing: trailing,
       onTap: () =>

@@ -147,8 +147,8 @@ class _FollowButtonState extends State<FollowButton> {
       return OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.textSecondary,
-          side: const BorderSide(color: AppColors.borderStrong),
+          foregroundColor: context.colors.textSecondary,
+          side: BorderSide(color: context.colors.borderStrong),
           visualDensity: density,
         ),
         child: const Text('已关注'),
@@ -159,8 +159,8 @@ class _FollowButtonState extends State<FollowButton> {
       icon: const Icon(Icons.add_rounded, size: 18),
       label: const Text('关注'),
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.accent,
-        foregroundColor: AppColors.onAccent,
+        backgroundColor: context.colors.accent,
+        foregroundColor: context.colors.onAccent,
         visualDensity: density,
       ),
     );
@@ -189,7 +189,7 @@ class SocialUserTile extends StatelessWidget {
           Flexible(child: Text(u.nickname, maxLines: 1, overflow: TextOverflow.ellipsis)),
           if (u.musician) ...[
             const SizedBox(width: 4),
-            const Icon(Icons.verified_rounded, size: 14, color: AppColors.accent),
+            Icon(Icons.verified_rounded, size: 14, color: context.colors.accent),
           ],
         ],
       ),
@@ -199,7 +199,7 @@ class SocialUserTile extends StatelessWidget {
               u.signature!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
       trailing: trailing ?? FollowButton(userId: u.userId, followed: u.followed, compact: true),
       onTap: onTap ?? () => openUser(context, u.userId, name: u.nickname),

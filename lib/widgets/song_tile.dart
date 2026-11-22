@@ -40,7 +40,7 @@ class SongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final playing = PlayerScope.of(context).current?.id == song.id;
-    final titleColor = playing ? AppColors.accent : AppColors.textPrimary;
+    final titleColor = playing ? context.colors.accent : context.colors.textPrimary;
     return InkWell(
       onTap: onTap,
       onLongPress: selected == null ? () => showCopySongSheet(context, song) : null,
@@ -53,7 +53,7 @@ class SongTile extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 8),
                 child: Icon(
                   checked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                  color: checked ? AppColors.accent : AppColors.textMuted,
+                  color: checked ? context.colors.accent : context.colors.textMuted,
                 ),
               ),
             if (index != null)
@@ -61,19 +61,19 @@ class SongTile extends StatelessWidget {
                 width: 32,
                 child: Text(
                   '$index',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  style: TextStyle(color: context.colors.textMuted, fontSize: 13),
                 ),
               ),
             SizedBox(
-              width: 44,
+              width: 48,
               child: CoverArt(
                 palette: song.palette,
                 seed: song.id,
                 imageUrl: song.coverUrl,
-                radius: 4,
+                radius: AppRadius.small,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -85,20 +85,24 @@ class SongTile extends StatelessWidget {
                         if (song.subtitle case final s?)
                           TextSpan(
                             text: '  $s',
-                            style: const TextStyle(color: AppColors.textMuted),
+                            style: TextStyle(color: context.colors.textMuted),
                           ),
                       ],
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, color: titleColor),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: titleColor,
+                      fontWeight: playing ? FontWeight.w600 : FontWeight.w400,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     [song.artist, if (song.album.isNotEmpty) song.album].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                   ),
                 ],
               ),
@@ -106,13 +110,13 @@ class SongTile extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               trailing ?? formatDuration(song.duration),
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              style: TextStyle(fontSize: 12, color: context.colors.textMuted),
             ),
             if (selected == null)
               IconButton(
                 tooltip: '更多',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+                icon: Icon(Icons.more_vert_rounded, color: context.colors.textSecondary),
                 onPressed: () => showSongActions(context, song, onRemove: onRemove),
               ),
           ],

@@ -21,7 +21,7 @@ class UserAvatar extends StatelessWidget {
             style: TextStyle(
               fontSize: size * 0.48,
               fontWeight: FontWeight.w800,
-              color: AppColors.onAccent,
+              color: context.scheme.onPrimaryContainer,
               height: 1,
             ),
           );
@@ -32,7 +32,9 @@ class UserAvatar extends StatelessWidget {
       alignment: Alignment.center,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: profile == null ? AppColors.cardHover : AppColors.accent,
+        color: profile == null
+            ? context.scheme.secondaryContainer
+            : context.scheme.primaryContainer,
         shape: BoxShape.circle,
       ),
       child: switch (profile?.avatarUrl) {
@@ -44,7 +46,12 @@ class UserAvatar extends StatelessWidget {
           errorBuilder: (_, _, _) => initial ?? const SizedBox.shrink(),
         ),
         null =>
-          initial ?? Icon(Icons.person_rounded, size: size * 0.6, color: AppColors.textSecondary),
+          initial ??
+              Icon(
+                Icons.person_rounded,
+                size: size * 0.6,
+                color: context.scheme.onSecondaryContainer,
+              ),
       },
     );
   }

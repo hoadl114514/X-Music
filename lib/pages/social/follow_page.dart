@@ -60,9 +60,9 @@ class _LoginPrompt extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.people_alt_rounded, size: 48, color: AppColors.textMuted),
+          Icon(Icons.people_alt_rounded, size: 48, color: context.colors.textMuted),
           const SizedBox(height: 16),
-          Text(text, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(text, style: TextStyle(color: context.colors.textSecondary)),
           const SizedBox(height: 12),
           FilledButton(onPressed: () => LoginPage.open(context), child: const Text('去登录')),
         ],
@@ -148,14 +148,16 @@ class _FeedState extends State<_Feed> {
               ),
               for (final s in FollowScene.values) ...[
                 if (s.index > 0)
-                  const SizedBox(
+                  SizedBox(
                     height: 14,
-                    child: VerticalDivider(width: 1, color: AppColors.borderStrong),
+                    child: VerticalDivider(width: 1, color: context.colors.borderStrong),
                   ),
                 TextButton(
                   onPressed: () => setState(() => _scene = s),
                   style: TextButton.styleFrom(
-                    foregroundColor: s == _scene ? AppColors.textPrimary : AppColors.textMuted,
+                    foregroundColor: s == _scene
+                        ? context.colors.textPrimary
+                        : context.colors.textMuted,
                     visualDensity: VisualDensity.compact,
                     textStyle: TextStyle(
                       fontSize: 15,
@@ -206,9 +208,9 @@ class _FriendsRow extends StatelessWidget {
                   height: 64,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.borderStrong),
+                    border: Border.all(color: context.colors.borderStrong),
                   ),
-                  child: const Icon(Icons.more_horiz_rounded, color: AppColors.textSecondary),
+                  child: Icon(Icons.more_horiz_rounded, color: context.colors.textSecondary),
                 ),
               ),
             ],
@@ -241,7 +243,7 @@ class _RoundItem extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
             ),
           ],
         ),

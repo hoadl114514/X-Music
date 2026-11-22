@@ -163,7 +163,7 @@ class _TrackListViewState extends State<TrackListView> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        backgroundColor: AppColors.surfaceHigh,
+        backgroundColor: context.colors.surfaceHigh,
         title: const Text('删除歌曲'),
         content: Text(
           songs.length == 1
@@ -173,7 +173,7 @@ class _TrackListViewState extends State<TrackListView> {
         actions: [
           TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('取消')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.negative),
             onPressed: () => Navigator.of(c).pop(true),
             child: const Text('删除'),
           ),
@@ -284,16 +284,16 @@ class _TrackListViewState extends State<TrackListView> {
                   child: Center(
                     child: Text(
                       widget.emptyText,
-                      style: const TextStyle(color: AppColors.textSecondary),
+                      style: TextStyle(color: context.colors.textSecondary),
                     ),
                   ),
                 )
               else if (shown != null && shown.isEmpty)
-                const SliverToBoxAdapter(
+                SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.all(32),
+                    padding: const EdgeInsets.all(32),
                     child: Center(
-                      child: Text('没有匹配的歌曲', style: TextStyle(color: AppColors.textSecondary)),
+                      child: Text('没有匹配的歌曲', style: TextStyle(color: context.colors.textSecondary)),
                     ),
                   ),
                 )
@@ -345,7 +345,7 @@ class _SelectBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final sel = selected;
     return Container(
-      color: sel == null ? null : AppColors.surfaceHigh,
+      color: sel == null ? null : context.colors.surfaceHigh,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       height: 48,
       child: sel == null
@@ -355,7 +355,7 @@ class _SelectBar extends StatelessWidget {
                 onPressed: onStart,
                 icon: const Icon(Icons.checklist_rounded, size: 20),
                 label: const Text('批量删除'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+                style: TextButton.styleFrom(foregroundColor: context.colors.textSecondary),
               ),
             )
           : Row(
@@ -365,12 +365,12 @@ class _SelectBar extends StatelessWidget {
                   child: Text(
                     '已选 ${sel.length} 首',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: context.colors.textSecondary),
                   ),
                 ),
                 TextButton(
                   onPressed: sel.isEmpty ? null : onRemove,
-                  style: TextButton.styleFrom(foregroundColor: AppColors.negative),
+                  style: TextButton.styleFrom(foregroundColor: context.colors.negative),
                   child: const Text('删除'),
                 ),
                 TextButton(onPressed: onCancel, child: const Text('完成')),
@@ -408,7 +408,7 @@ class ListSearchField extends StatelessWidget {
         decoration: InputDecoration(
           isDense: true,
           filled: true,
-          fillColor: AppColors.surfaceHigh,
+          fillColor: context.colors.surfaceHigh,
           hintText: hint,
           prefixIcon: const Icon(Icons.search_rounded, size: 20),
           suffixIcon: m == null
@@ -416,10 +416,7 @@ class ListSearchField extends StatelessWidget {
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '$m 个结果',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                    ),
+                    Text('$m 个结果', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
                     IconButton(
                       tooltip: '清空',
                       icon: const Icon(Icons.close_rounded, size: 18),
@@ -530,13 +527,13 @@ class CollectionHeader extends StatelessWidget {
                             l.text,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                            style: TextStyle(fontSize: 13, color: context.colors.textPrimary),
                           ),
                         ),
-                        const Icon(
+                        Icon(
                           Icons.chevron_right_rounded,
                           size: 16,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ],
                     ),
@@ -548,7 +545,7 @@ class CollectionHeader extends StatelessWidget {
                     l,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -562,8 +559,8 @@ class CollectionHeader extends StatelessWidget {
                       icon: const Icon(Icons.play_arrow_rounded),
                       label: const Text('播放全部'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accent,
-                        foregroundColor: AppColors.onAccent,
+                        backgroundColor: context.colors.accent,
+                        foregroundColor: context.colors.onAccent,
                       ),
                     ),
                     ...actions,
@@ -596,7 +593,7 @@ class ErrorState extends StatelessWidget {
             Text(
               '加载失败：$text',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: onRetry, child: const Text('重试')),

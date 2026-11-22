@@ -52,8 +52,8 @@ class _UserStatusChipState extends State<UserStatusChip> {
     final song = s?.song;
     final tappable = widget.editable || song != null;
     return Material(
-      color: AppColors.card,
-      shape: const StadiumBorder(side: BorderSide(color: AppColors.border)),
+      color: context.colors.card,
+      shape: StadiumBorder(side: BorderSide(color: context.colors.border)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: tappable ? _onTap : null,
@@ -63,7 +63,7 @@ class _UserStatusChipState extends State<UserStatusChip> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (s == null)
-                const Icon(Icons.add_rounded, size: 16, color: AppColors.textSecondary)
+                Icon(Icons.add_rounded, size: 16, color: context.colors.textSecondary)
               else
                 StatusIcon(url: s.iconUrl, size: 16),
               const SizedBox(width: 4),
@@ -74,25 +74,25 @@ class _UserStatusChipState extends State<UserStatusChip> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: s == null ? AppColors.textSecondary : AppColors.textPrimary,
+                    color: s == null ? context.colors.textSecondary : context.colors.textPrimary,
                   ),
                 ),
               ),
               if (song != null) ...[
                 const SizedBox(width: 6),
-                const Icon(Icons.music_note_rounded, size: 14, color: AppColors.accent),
+                Icon(Icons.music_note_rounded, size: 14, color: context.colors.accent),
                 Flexible(
                   child: Text(
                     '${song.title} - ${song.artist}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                   ),
                 ),
               ],
               if (widget.editable && s != null) ...[
                 const SizedBox(width: 2),
-                const Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.textMuted),
+                Icon(Icons.chevron_right_rounded, size: 16, color: context.colors.textMuted),
               ],
             ],
           ),
@@ -114,7 +114,7 @@ class StatusIcon extends StatelessWidget {
     final fallback = Icon(
       Icons.emoji_emotions_outlined,
       size: size,
-      color: AppColors.textSecondary,
+      color: context.colors.textSecondary,
     );
     final u = url;
     if (u == null) return fallback;
@@ -132,7 +132,7 @@ class StatusIcon extends StatelessWidget {
 Future<UserStatus?> showStatusSheet(BuildContext context, UserStatus? current) =>
     showModalBottomSheet<UserStatus>(
       context: context,
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => _StatusSheet(current: current),
@@ -220,12 +220,12 @@ class _StatusSheetState extends State<_StatusSheet> {
                     );
                   }
                   if (list.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24),
+                    return Padding(
+                      padding: const EdgeInsets.all(24),
                       child: Text(
                         '暂时没有可以设置的状态',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textMuted),
+                        style: TextStyle(color: context.colors.textMuted),
                       ),
                     );
                   }
@@ -308,10 +308,10 @@ class _OptionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.card,
+      color: context.colors.card,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.panel),
-        side: BorderSide(color: selected ? AppColors.accent : AppColors.border),
+        side: BorderSide(color: selected ? context.colors.accent : context.colors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -330,7 +330,7 @@ class _OptionTile extends StatelessWidget {
                 style: const TextStyle(fontSize: 12),
               ),
               if (option.canEdit)
-                const Icon(Icons.edit_rounded, size: 12, color: AppColors.textMuted),
+                Icon(Icons.edit_rounded, size: 12, color: context.colors.textMuted),
             ],
           ),
         ),
@@ -366,8 +366,8 @@ class _SameStatusPageState extends State<SameStatusPage> {
               : d == null
               ? const Center(child: CircularProgressIndicator())
               : d.users.isEmpty
-              ? const Center(
-                  child: Text('暂时没有状态相同的人', style: TextStyle(color: AppColors.textMuted)),
+              ? Center(
+                  child: Text('暂时没有状态相同的人', style: TextStyle(color: context.colors.textMuted)),
                 )
               : ListView.builder(
                   itemCount: d.users.length,
@@ -398,7 +398,7 @@ class _StatusUserTile extends StatelessWidget {
               lines.join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
       trailing: u.status == null ? null : StatusIcon(url: u.status!.iconUrl),
       onTap: open,

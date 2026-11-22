@@ -98,7 +98,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 subtitle: '${p.trackCount} 首',
                 trailing: IconButton(
                   tooltip: '管理歌单',
-                  icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+                  icon: Icon(Icons.more_vert_rounded, color: context.colors.textSecondary),
                   onPressed: () => showPlaylistManageSheet(context, p),
                 ),
               ),
@@ -114,7 +114,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 onReturned: _reload,
                 trailing: IconButton(
                   tooltip: '管理歌单',
-                  icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
+                  icon: Icon(Icons.more_vert_rounded, color: context.colors.textSecondary),
                   onPressed: () => _showCollectedSheet(context, p),
                 ),
               ),
@@ -128,7 +128,7 @@ class _LibraryPageState extends State<LibraryPage> {
 Future<void> _showCollectedSheet(BuildContext context, Playlist playlist) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.surfaceHigh,
+    backgroundColor: context.colors.surfaceHigh,
     showDragHandle: true,
     builder: (sheet) {
       void then(Future<void> Function(BuildContext context) action) {
@@ -142,13 +142,13 @@ Future<void> _showCollectedSheet(BuildContext context, Playlist playlist) {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.campaign_outlined, color: AppColors.textPrimary),
+              leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
               title: const Text('分享到动态'),
               onTap: () => then((c) => ComposeEventPage.open(c, playlist: playlist)),
             ),
             ListTile(
-              leading: const Icon(Icons.bookmark_remove_outlined, color: AppColors.negative),
-              title: const Text('取消收藏', style: TextStyle(color: AppColors.negative)),
+              leading: Icon(Icons.bookmark_remove_outlined, color: context.colors.negative),
+              title: Text('取消收藏', style: TextStyle(color: context.colors.negative)),
               onTap: () => then((c) => _unsubscribe(c, playlist)),
             ),
             const SizedBox(height: 8),
@@ -163,13 +163,13 @@ Future<void> _unsubscribe(BuildContext context, Playlist playlist) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       title: const Text('取消收藏'),
       content: Text('确定不再收藏「${playlist.name}」？'),
       actions: [
         TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('取消')),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: AppColors.negative),
+          style: FilledButton.styleFrom(backgroundColor: context.colors.negative),
           onPressed: () => Navigator.of(c).pop(true),
           child: const Text('取消收藏'),
         ),
@@ -196,7 +196,7 @@ class _LikedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = playlist;
     return Material(
-      color: AppColors.card,
+      color: context.colors.card,
       borderRadius: BorderRadius.circular(AppRadius.panel),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -223,7 +223,7 @@ class _LikedCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.favorite_rounded, size: 20, color: AppColors.accent),
+                        Icon(Icons.favorite_rounded, size: 20, color: context.colors.accent),
                         const SizedBox(width: 8),
                         Text('我喜欢的音乐', style: Theme.of(context).textTheme.titleMedium),
                       ],
@@ -231,12 +231,12 @@ class _LikedCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       p == null ? '加载中…' : '${p.trackCount} 首',
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              Icon(Icons.chevron_right_rounded, color: context.colors.textMuted),
             ],
           ),
         ),
@@ -268,7 +268,7 @@ class _SectionHeader extends StatelessWidget {
           children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(width: 6),
-            Text('$count', style: const TextStyle(color: AppColors.textMuted)),
+            Text('$count', style: TextStyle(color: context.colors.textMuted)),
             const Spacer(),
             ?action,
           ],
@@ -288,7 +288,7 @@ class _Empty extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Center(
-        child: Text(text, style: const TextStyle(color: AppColors.textSecondary)),
+        child: Text(text, style: TextStyle(color: context.colors.textSecondary)),
       ),
     );
   }

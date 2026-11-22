@@ -37,6 +37,8 @@ class SettingsPage extends StatelessWidget {
               subtitle: const Text('扫码或 Cookie；未登录时只能播放免费歌曲'),
               onTap: () => LoginPage.open(context),
             ),
+          const _Header('外观'),
+          const _AppearanceTiles(),
           const _Header('播放'),
           ListTile(
             leading: const Icon(Icons.high_quality_rounded),
@@ -112,6 +114,141 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
+/// 外观：主题模式、动态取色、主题色。
+class _AppearanceTiles extends StatelessWidget {
+  const _AppearanceTiles();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppScope.of(context).settings;
+    final supported = AppScope.dynamicColorSupported(context);
+    final useDynamic = supported && settings.dynamicColor;
+    final scheme = context.scheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.dark_mode_outlined),
+          title: const Text('主题'),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SegmentedButton<AppThemeMode>(
+              segments: [
+                for (final m in AppThemeMode.values) ButtonSegment(value: m, label: Text(m.label)),
+              ],
+              selected: {settings.themeMode},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) => settings.themeMode = v.first,
+            ),
+          ),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.wallpaper_rounded),
+          title: const Text('动态取色'),
+          subtitle: Text(supported ? '跟随系统壁纸的颜色' : '需要 Android 12 及以上'),
+          value: useDynamic,
+          onChanged: supported ? (v) => settings.dynamicColor = v : null,
+        ),
+        ListTile(
+          enabled: !useDynamic,
+          leading: const Icon(Icons.palette_outlined),
+          title: const Text('主题色'),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final (name, color) in AppTheme.seeds)
+                  _SeedSwatch(
+                    name: name,
+                    color: color,
+                    selected: !useDynamic && settings.seedColor == color,
+                    enabled: !useDynamic,
+                    onTap: () => settings.seedColor = color,
+                    ring: scheme.onSurface,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 一个主题色圆点：上半是种子色生成的 primary，下半是 tertiary，和系统壁纸取色的样式一致。
+class _SeedSwatch extends StatelessWidget {
+  const _SeedSwatch({
+    required this.name,
+    required this.color,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+    required this.ring,
+  });
+
+  final String name;
+  final Color color;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Color ring;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ColorScheme.fromSeed(seedColor: color, brightness: Theme.of(context).brightness);
+    return Tooltip(
+      message: name,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: name,
+        child: InkResponse(
+          onTap: enabled ? onTap : null,
+          radius: 26,
+          child: Opacity(
+            opacity: enabled ? 1 : 0.38,
+            child: Container(
+              width: 44,
+              height: 44,
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: selected ? ring : Colors.transparent, width: 2),
+              ),
+              child: ClipOval(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ColoredBox(color: s.primary, child: const SizedBox.expand()),
+                    ),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ColoredBox(
+                              color: s.secondaryContainer,
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                          Expanded(
+                            child: ColoredBox(color: s.tertiary, child: const SizedBox.expand()),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 通知关着时提示去打开：后台播放的媒体通知、控制中心和锁屏卡片都依赖它。
 /// 从系统设置回来时重新检查。
 class _NotificationTile extends StatefulWidget {
@@ -150,11 +287,11 @@ class _NotificationTileState extends State<_NotificationTile> with WidgetsBindin
   @override
   Widget build(BuildContext context) {
     if (_enabled) return const SizedBox.shrink();
-    return const ListTile(
-      leading: Icon(Icons.notifications_off_outlined, color: AppColors.accent),
-      title: Text('通知权限未开启'),
-      subtitle: Text('开启后通知栏、控制中心和锁屏才能显示播放控制'),
-      trailing: Icon(Icons.chevron_right_rounded),
+    return ListTile(
+      leading: Icon(Icons.notifications_off_outlined, color: context.colors.accent),
+      title: const Text('通知权限未开启'),
+      subtitle: const Text('开启后通知栏、控制中心和锁屏才能显示播放控制'),
+      trailing: const Icon(Icons.chevron_right_rounded),
       onTap: SystemMediaBridge.openNotificationSettings,
     );
   }
@@ -307,7 +444,7 @@ class _LimitOption extends StatelessWidget {
           Icon(
             selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
             size: 20,
-            color: selected ? AppColors.accent : null,
+            color: selected ? context.colors.accent : null,
           ),
           const SizedBox(width: 12),
           Text(label),
@@ -328,7 +465,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
       child: Text(
         title,
-        style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700),
+        style: TextStyle(color: context.colors.accent, fontWeight: FontWeight.w700),
       ),
     );
   }

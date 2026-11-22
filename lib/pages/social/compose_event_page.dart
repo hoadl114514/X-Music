@@ -90,7 +90,7 @@ class _ComposeEventPageState extends State<ComposeEventPage> {
   Future<void> _pickPlaylist() async {
     final p = await showModalBottomSheet<Playlist>(
       context: context,
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => const _PlaylistPicker(),
@@ -115,8 +115,8 @@ class _ComposeEventPageState extends State<ComposeEventPage> {
             child: FilledButton(
               onPressed: _canSend ? _send : null,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: AppColors.onAccent,
+                backgroundColor: context.colors.accent,
+                foregroundColor: context.colors.onAccent,
                 visualDensity: VisualDensity.compact,
               ),
               child: _busy
@@ -194,9 +194,9 @@ class _ComposeEventPageState extends State<ComposeEventPage> {
               ],
             ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             '一条动态只能附一首歌或一个歌单。不附内容时需要写点什么。',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 12, color: context.colors.textMuted),
           ),
         ],
       ),
@@ -220,7 +220,7 @@ class _Attachment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.cardHover,
+      color: context.colors.cardHover,
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: ListTile(
         leading: SizedBox(width: 44, height: 44, child: cover),
@@ -229,7 +229,7 @@ class _Attachment extends StatelessWidget {
           subtitle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
         trailing: IconButton(
           tooltip: '移除',
@@ -259,8 +259,8 @@ class _PlaylistPicker extends StatelessWidget {
             ),
             Expanded(
               child: list.isEmpty
-                  ? const Center(
-                      child: Text('还没有歌单', style: TextStyle(color: AppColors.textSecondary)),
+                  ? Center(
+                      child: Text('还没有歌单', style: TextStyle(color: context.colors.textSecondary)),
                     )
                   : ListView(
                       children: [
@@ -364,7 +364,7 @@ class _SongPickerState extends State<_SongPicker> {
       body = Center(
         child: Text(
           _query.text.trim().isEmpty ? '输入歌名或歌手' : '没有找到',
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
       );
     } else {
@@ -382,7 +382,7 @@ class _SongPickerState extends State<_SongPicker> {
               s.artist,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             onTap: () => Navigator.of(context).pop(s),
           );
@@ -419,23 +419,23 @@ class ComposeEventBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Material(
-        color: AppColors.cardHover,
+        color: context.colors.cardHover,
         borderRadius: BorderRadius.circular(AppRadius.pill),
         child: InkWell(
           borderRadius: BorderRadius.circular(AppRadius.pill),
           onTap: () async {
             if (await ComposeEventPage.open(context)) onPosted?.call();
           },
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.edit_outlined, size: 20, color: AppColors.textSecondary),
-                SizedBox(width: 12),
+                Icon(Icons.edit_outlined, size: 20, color: context.colors.textSecondary),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text('分享新鲜事…', style: TextStyle(color: AppColors.textSecondary)),
+                  child: Text('分享新鲜事…', style: TextStyle(color: context.colors.textSecondary)),
                 ),
-                Icon(Icons.campaign_outlined, size: 20, color: AppColors.textSecondary),
+                Icon(Icons.campaign_outlined, size: 20, color: context.colors.textSecondary),
               ],
             ),
           ),

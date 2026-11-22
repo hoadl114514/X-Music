@@ -139,7 +139,7 @@ class PagedListViewState<T> extends State<PagedListView<T>> {
       footer = Padding(
         padding: const EdgeInsets.symmetric(vertical: 48),
         child: Center(
-          child: Text(widget.empty, style: const TextStyle(color: AppColors.textMuted)),
+          child: Text(widget.empty, style: TextStyle(color: context.colors.textMuted)),
         ),
       );
     } else {
@@ -170,7 +170,7 @@ class PagedListViewState<T> extends State<PagedListView<T>> {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.border),
+                Divider(height: 1, indent: 16, endIndent: 16, color: context.colors.border),
                 child,
               ],
             );
@@ -192,7 +192,7 @@ class _LoginHint extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
       child: Column(
         children: [
-          Text(text, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(text, style: TextStyle(color: context.colors.textSecondary)),
           const SizedBox(height: 12),
           FilledButton(onPressed: () => LoginPage.open(context), child: const Text('去登录')),
         ],

@@ -29,7 +29,7 @@ Future<void> showCopySongSheet(BuildContext context, Song song) {
   ];
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.surfaceHigh,
+    backgroundColor: context.colors.surfaceHigh,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (context) => SafeArea(
@@ -44,7 +44,7 @@ Future<void> showCopySongSheet(BuildContext context, Song song) {
             ),
             for (final o in options)
               ListTile(
-                leading: Icon(o.icon, color: AppColors.textPrimary),
+                leading: Icon(o.icon, color: context.colors.textPrimary),
                 title: Text(o.text, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text('复制${o.label}'),
                 onTap: () {
@@ -68,14 +68,14 @@ Future<void> showCopySongSheet(BuildContext context, Song song) {
 Future<void> showTextCopySheet(BuildContext context, String text, {required String label}) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.surfaceHigh,
+    backgroundColor: context.colors.surfaceHigh,
     showDragHandle: true,
     builder: (sheet) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: const Icon(Icons.copy_rounded, color: AppColors.textPrimary),
+            leading: Icon(Icons.copy_rounded, color: context.colors.textPrimary),
             title: Text('复制$label'),
             onTap: () {
               Navigator.of(sheet).pop();
@@ -92,7 +92,7 @@ Future<void> showTextCopySheet(BuildContext context, String text, {required Stri
 
 /// 底部弹窗里的「自由复制」一项：关掉弹窗，打开自由复制页。
 Widget freeCopyTile(BuildContext sheet, String text, {String? label}) => ListTile(
-  leading: const Icon(Icons.text_fields_rounded, color: AppColors.textPrimary),
+  leading: Icon(Icons.text_fields_rounded, color: sheet.colors.textPrimary),
   title: const Text('自由复制'),
   subtitle: const Text('选择任意一段文字复制'),
   onTap: () {

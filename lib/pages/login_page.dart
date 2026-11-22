@@ -171,7 +171,7 @@ class _QrLoginState extends State<_QrLogin> with AutomaticKeepAliveClientMixin {
                           child: Icon(
                             expired ? Icons.refresh_rounded : Icons.check_circle_rounded,
                             size: 56,
-                            color: expired ? Colors.black54 : AppColors.accent,
+                            color: expired ? Colors.black54 : context.colors.accent,
                           ),
                         ),
                     ],
@@ -181,10 +181,10 @@ class _QrLoginState extends State<_QrLogin> with AutomaticKeepAliveClientMixin {
         const SizedBox(height: 20),
         Text(hint, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15)),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           '二维码在本机屏幕上时，可以用另一台设备扫，或截图后在网易云「扫一扫」里从相册选择。',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.5),
+          style: TextStyle(fontSize: 12, color: context.colors.textMuted, height: 1.5),
         ),
         const SizedBox(height: 16),
         Center(
@@ -241,15 +241,15 @@ class _CookieLoginState extends State<_CookieLogin> with AutomaticKeepAliveClien
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
+        Text(
           '在电脑浏览器登录 music.163.com，打开开发者工具，复制请求头里的 Cookie 粘贴到下面。'
           '至少需要包含 MUSIC_U。',
-          style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+          style: TextStyle(color: context.colors.textSecondary, height: 1.5),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Cookie 只保存在本机，用来以你的账号请求网易云接口。请勿分享给他人。',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.5),
+          style: TextStyle(color: context.colors.textMuted, fontSize: 12, height: 1.5),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -268,8 +268,8 @@ class _CookieLoginState extends State<_CookieLogin> with AutomaticKeepAliveClien
         FilledButton(
           onPressed: busy ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.accent,
-            foregroundColor: AppColors.onAccent,
+            backgroundColor: context.colors.accent,
+            foregroundColor: context.colors.onAccent,
             minimumSize: const Size.fromHeight(48),
           ),
           child: busy
@@ -296,15 +296,15 @@ class LoginPrompt extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.lock_outline_rounded, size: 48, color: AppColors.textMuted),
+          Icon(Icons.lock_outline_rounded, size: 48, color: context.colors.textMuted),
           const SizedBox(height: 12),
-          Text(message, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(message, style: TextStyle(color: context.colors.textSecondary)),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => LoginPage.open(context),
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: AppColors.onAccent,
+              backgroundColor: context.colors.accent,
+              foregroundColor: context.colors.onAccent,
             ),
             child: const Text('登录'),
           ),

@@ -18,7 +18,7 @@ import '../social/compose_event_page.dart';
 Future<void> showSongActions(BuildContext context, Song song, {VoidCallback? onRemove}) =>
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surfaceHigh,
+      backgroundColor: context.colors.surfaceHigh,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => _SongActions(song: song, onRemove: onRemove),
@@ -49,7 +49,7 @@ class _SongActions extends StatelessWidget {
       Color? color,
       Widget? leading,
     }) => ListTile(
-      leading: leading ?? Icon(icon, color: color ?? AppColors.textPrimary),
+      leading: leading ?? Icon(icon, color: color ?? context.colors.textPrimary),
       title: Text(
         title,
         maxLines: 1,
@@ -106,7 +106,7 @@ class _SongActions extends StatelessWidget {
                     AppScope.toast('操作失败：$e');
                   }
                 }),
-                color: liked ? AppColors.negative : null,
+                color: liked ? context.colors.negative : null,
               ),
               item(
                 Icons.playlist_add_rounded,
@@ -118,7 +118,7 @@ class _SongActions extends StatelessWidget {
                   Icons.playlist_remove_rounded,
                   '从歌单中删除',
                   () => then((_) => remove()),
-                  color: AppColors.negative,
+                  color: context.colors.negative,
                 ),
               item(
                 Icons.mode_comment_outlined,

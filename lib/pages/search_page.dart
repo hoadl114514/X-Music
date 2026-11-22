@@ -290,18 +290,18 @@ class _SuggestionsState extends State<_Suggestions> {
         for (final h in history)
           ListTile(
             dense: true,
-            leading: const Icon(Icons.history_rounded, size: 20, color: AppColors.textMuted),
+            leading: Icon(Icons.history_rounded, size: 20, color: context.colors.textMuted),
             title: Text(h, maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: () => widget.onSearch(h),
           ),
         for (final w in words.take(8))
           ListTile(
             dense: true,
-            leading: const Icon(Icons.search_rounded, size: 20, color: AppColors.textMuted),
+            leading: Icon(Icons.search_rounded, size: 20, color: context.colors.textMuted),
             title: Text(w, maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: IconButton(
               tooltip: '填入',
-              icon: const Icon(Icons.north_west_rounded, size: 18, color: AppColors.textMuted),
+              icon: Icon(Icons.north_west_rounded, size: 18, color: context.colors.textMuted),
               onPressed: () {
                 widget.input.value = TextEditingValue(
                   text: w,
@@ -408,7 +408,7 @@ class _SuggestionsState extends State<_Suggestions> {
                   const Spacer(),
                   IconButton(
                     tooltip: '清空搜索历史',
-                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted),
+                    icon: Icon(Icons.delete_outline_rounded, color: context.colors.textMuted),
                     onPressed: () => _confirmClear(context),
                   ),
                 ],
@@ -444,7 +444,7 @@ class _SuggestionsState extends State<_Suggestions> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: i < 3 ? AppColors.accent : AppColors.textMuted,
+                          color: i < 3 ? context.colors.accent : context.colors.textMuted,
                         ),
                       ),
                       label: Text(w),
@@ -583,7 +583,7 @@ class _ArtistTile extends StatelessWidget {
       title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         '单曲 ${a.songCount} · 专辑 ${a.albumCount}',
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       ),
       onTap: () => openArtist(context, ArtistRef(a.id, a.name)),
     );
@@ -609,7 +609,7 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const style = TextStyle(color: AppColors.textMuted);
+    final style = TextStyle(color: context.colors.textMuted);
     final Widget child;
     if (loading) {
       child = const SizedBox.square(
@@ -621,7 +621,7 @@ class _Footer extends StatelessWidget {
     } else if (empty) {
       child = Text('没有找到相关$noun', style: style);
     } else if (done) {
-      child = const Text('没有更多了', style: style);
+      child = Text('没有更多了', style: style);
     } else {
       child = const SizedBox.shrink();
     }
