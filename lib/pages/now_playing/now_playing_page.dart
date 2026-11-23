@@ -442,11 +442,14 @@ class _WikiPane extends StatelessWidget {
               onNotification: (n) {
                 // 只看竖向滚动；相关歌单那一排横向列表不算。
                 if (n.metrics.axis != Axis.vertical) return false;
-                if (n.metrics.pixels <= n.metrics.minScrollExtent) {
-                  onScrollDown(false);
-                } else if (n is UserScrollNotification) {
+                // 方向一变就切换。方向通知在位置更新之前发出，刚开始往下翻时位置还是 0，
+                // 所以「回到顶部」只看位置更新，不看方向通知。
+                if (n is UserScrollNotification) {
                   if (n.direction == ScrollDirection.reverse) onScrollDown(true);
                   if (n.direction == ScrollDirection.forward) onScrollDown(false);
+                } else if (n is ScrollUpdateNotification &&
+                    n.metrics.pixels <= n.metrics.minScrollExtent) {
+                  onScrollDown(false);
                 }
                 return false;
               },
