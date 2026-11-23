@@ -56,9 +56,11 @@ void main() {
               'id': 43,
               'name': '一起建的歌',
               'trackCount': 12,
+              // 真实返回：共享歌单 specialType 300，列表里的成员只有 userId。
+              'specialType': 300,
               'creator': {'userId': 1, 'nickname': '我'},
               'sharedUsers': [
-                {'userId': 5, 'nickname': '好友'},
+                {'userId': 5},
               ],
             },
             if (!unsubscribed)
@@ -70,6 +72,23 @@ void main() {
                 'creator': {'userId': 2, 'nickname': '别人'},
               },
           ],
+        });
+      }
+      if (path == '/api/v6/playlist/detail' && r.bodyFields['id'] == '43') {
+        // 歌单详情里的成员带昵称和头像。
+        return _json({
+          'code': 200,
+          'playlist': {
+            'id': 43,
+            'name': '一起建的歌',
+            'specialType': 300,
+            'trackIds': <Object>[],
+            'creator': {'userId': 1, 'nickname': '我'},
+            'sharedUsers': [
+              {'userId': 5, 'nickname': '好友'},
+            ],
+          },
+          'sharedPrivilege': {'status': 'SHARED', 'usePermission': 'NORMAL'},
         });
       }
       return _json({'code': 200});
@@ -143,6 +162,9 @@ void main() {
     await tester.tap(find.text('一起建的歌'));
     await tester.pumpAndSettle();
     expect(find.text('邀请好友'), findsOneWidget);
+    // 成员昵称从歌单详情补全，头像位置显示昵称首字。
+    expect(find.text('好'), findsOneWidget);
+    expect(find.text('?'), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

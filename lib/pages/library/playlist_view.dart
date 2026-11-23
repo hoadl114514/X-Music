@@ -111,16 +111,41 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
 }
 
 /// 共建歌单标题下的「邀请好友」：成员头像叠在一起，后面一个「+」，点了分享邀请。
-class _InviteRow extends StatelessWidget {
+class _InviteRow extends StatefulWidget {
   const _InviteRow({required this.playlist});
 
   final Playlist playlist;
 
+  @override
+  State<_InviteRow> createState() => _InviteRowState();
+}
+
+class _InviteRowState extends State<_InviteRow> {
   static const _size = 28.0;
   static const _step = 18.0;
 
+  /// 成员。歌单列表接口里的成员只有 userId，没有昵称和头像，这时再取一次歌单详情补全。
+  late List<SocialUser> _members = widget.playlist.sharedUsers;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_members.any((u) => u.nickname.isEmpty || u.avatarUrl == null)) _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      final r = await AppScope.of(context).api.playlistTrackIds(widget.playlist.id);
+      if (mounted && r.playlist.sharedUsers.isNotEmpty) {
+        setState(() => _members = r.playlist.sharedUsers);
+      }
+    } catch (_) {
+      // 取不到就用列表里的，头像显示占位。
+    }
+  }
+
   void _invite() {
-    final p = playlist;
+    final p = widget.playlist;
     shareText(
       '我建了一个共建歌单「${p.name}」，来和我一起加歌吧：https://music.163.com/playlist?id=${p.id}',
       subject: '共建歌单',
@@ -135,12 +160,14 @@ class _InviteRow extends StatelessWidget {
     final account = AccountScope.of(context);
     final me = account.profile;
     // 创建者在最前：自己的歌单用自己的头像，其他成员跟在后面。
+    final playlist = widget.playlist;
     final members = [
       if (me != null && account.isOwn(playlist))
         (name: me.nickname, url: me.avatarUrl)
       else if (playlist.creator case final c?)
         (name: c, url: null),
-      for (final u in playlist.sharedUsers) (name: u.nickname, url: u.avatarUrl),
+      for (final u in _members)
+        if (u.userId != me?.userId) (name: u.nickname, url: u.avatarUrl),
     ].take(4).toList();
     Widget circle(Widget child, {Color? color}) => Container(
       width: _size,
