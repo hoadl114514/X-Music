@@ -6,8 +6,8 @@ import '../../data/models.dart';
 import '../../state/account_controller.dart';
 import '../music/nav.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/cover_art.dart';
 import '../../widgets/playlist_card.dart';
-import '../../widgets/retry_image.dart';
 import '../../widgets/share.dart';
 import 'track_list_view.dart';
 
@@ -222,20 +222,12 @@ class _InviteRow extends StatelessWidget {
                   for (final (i, m) in members.indexed)
                     Positioned(
                       left: _step * i,
-                      child: circle(
-                        m.url == null
-                            ? Text(
-                                m.name.isEmpty ? '?' : m.name.characters.first,
-                                style: TextStyle(fontSize: 11, color: scheme.onSecondaryContainer),
-                              )
-                            : ClipOval(
-                                child: Image(
-                                  image: retryImage(m.url!),
-                                  width: _size,
-                                  height: _size,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
+                      child: Container(
+                        width: _size,
+                        height: _size,
+                        padding: const EdgeInsets.all(1.5),
+                        decoration: BoxDecoration(color: scheme.surface, shape: BoxShape.circle),
+                        child: _MemberAvatar(name: m.name, url: m.url, size: _size - 3),
                       ),
                     ),
                   Positioned(
@@ -273,18 +265,27 @@ class _MemberAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final u = url;
+    if (u == null) {
+      return SizedBox.square(
+        dimension: size,
+        child: CircleAvatar(
+          backgroundColor: scheme.secondaryContainer,
+          child: Text(
+            name.isEmpty ? '?' : name.characters.first,
+            style: TextStyle(fontSize: size * 0.45, color: scheme.onSecondaryContainer),
+          ),
+        ),
+      );
+    }
+    // 和其他用户头像一样用 CoverArt：带重试，失败时显示占位图。
     return SizedBox.square(
       dimension: size,
-      child: CircleAvatar(
-        backgroundColor: scheme.secondaryContainer,
-        child: u == null
-            ? Text(
-                name.isEmpty ? '?' : name.characters.first,
-                style: TextStyle(fontSize: size * 0.5, color: scheme.onSecondaryContainer),
-              )
-            : ClipOval(
-                child: Image(image: retryImage(u), width: size, height: size, fit: BoxFit.cover),
-              ),
+      child: CoverArt(
+        palette: fallbackPalette(name),
+        seed: name,
+        imageUrl: u,
+        icon: Icons.person_rounded,
+        radius: size / 2,
       ),
     );
   }
