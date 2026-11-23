@@ -312,6 +312,33 @@ class NeteaseApi {
     );
   }
 
+  /// 共建歌单的成员和每首歌的添加人（歌单详情 trackIds 里的 uid）。
+  Future<SharedPlaylistInfo> sharedPlaylistInfo(String id) async {
+    final data = await _api('https://music.163.com/api/v6/playlist/detail', {'id': id, 'n': '0'});
+    return parseSharedPlaylistInfo(data);
+  }
+
+  /// 解析共建歌单的成员和添加人。单独拿出来方便测试。
+  static SharedPlaylistInfo parseSharedPlaylistInfo(Map<String, Object?> data) {
+    final raw = data['playlist'];
+    if (raw is! Map) throw const ApiException('歌单不存在或无权查看');
+    final creator = parseSocialUser(raw['creator']);
+    final members = <SocialUser>[
+      ?creator,
+      for (final u in _list(raw['sharedUsers']))
+        if (parseSocialUser(u) case final m? when m.userId != creator?.userId) m,
+    ];
+    final byId = {for (final m in members) m.userId: m};
+    return SharedPlaylistInfo(
+      creator: creator,
+      members: members,
+      adders: {
+        for (final t in _list(raw['trackIds']))
+          if (t is Map && t['id'] != null) '${t['id']}': ?byId[_int(t['uid'])],
+      },
+    );
+  }
+
   /// 歌单第一首歌的封面：歌单本身没有封面或封面加载失败时用它代替。只取一首，不拉全部歌曲。
   Future<String?> playlistFirstCover(String id) async {
     final data = await _api('https://music.163.com/api/v6/playlist/detail', {'id': id, 'n': '1'});

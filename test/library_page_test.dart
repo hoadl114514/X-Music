@@ -82,13 +82,31 @@ void main() {
             'id': 43,
             'name': '一起建的歌',
             'specialType': 300,
-            'trackIds': <Object>[],
+            'trackIds': [
+              {'id': 500, 'uid': 5},
+            ],
             'creator': {'userId': 1, 'nickname': '我'},
             'sharedUsers': [
               {'userId': 5, 'nickname': '好友'},
             ],
           },
           'sharedPrivilege': {'status': 'SHARED', 'usePermission': 'NORMAL'},
+        });
+      }
+      if (path == '/api/v3/song/detail') {
+        return _json({
+          'code': 200,
+          'songs': [
+            {
+              'id': 500,
+              'name': '好友加的歌',
+              'ar': [
+                {'id': 1, 'name': '某歌手'},
+              ],
+              'al': {'id': 2, 'name': '某专辑'},
+              'dt': 180000,
+            },
+          ],
         });
       }
       return _json({'code': 200});
@@ -163,8 +181,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('邀请好友'), findsOneWidget);
     // 成员昵称从歌单详情补全，头像位置显示昵称首字。
-    expect(find.text('好'), findsOneWidget);
+    expect(find.text('好'), findsNWidgets(2)); // 邀请行和添加人各一个。
     expect(find.text('?'), findsNothing);
+    // 每首歌下面显示谁添加的。
+    expect(find.text('好友加的歌'), findsOneWidget);
+    expect(find.text('好友 添加'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

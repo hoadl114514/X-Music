@@ -935,3 +935,14 @@ class ArtistProfile {
   final bool followed;
   final Album? latestAlbum;
 }
+
+/// 共建歌单的成员（创建者在最前）和每首歌是谁添加的。
+class SharedPlaylistInfo {
+  const SharedPlaylistInfo({this.creator, this.members = const [], this.adders = const {}});
+
+  final SocialUser? creator;
+  final List<SocialUser> members;
+
+  /// 歌曲 id → 添加这首歌的成员。
+  final Map<String, SocialUser> adders;
+}

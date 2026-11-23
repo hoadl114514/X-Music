@@ -28,4 +28,32 @@ void main() {
     expect(lists.first.sharedUsers, isEmpty);
     expect(lists.last.shared, isFalse);
   });
+
+  test('shared playlist info maps each track to the member who added it', () {
+    // 结构取自真实共享歌单的详情：trackIds 里的 uid 是添加人。
+    final info = NeteaseApi.parseSharedPlaylistInfo({
+      'code': 200,
+      'playlist': {
+        'id': 7,
+        'creator': {'userId': 1, 'nickname': '我', 'avatarUrl': 'http://p1.music.126.net/a.jpg'},
+        'sharedUsers': [
+          {'userId': 2, 'nickname': '朋友', 'avatarUrl': 'http://p1.music.126.net/b.jpg'},
+        ],
+        'trackIds': [
+          {'id': 100, 'uid': 2},
+          {'id': 101, 'uid': 1},
+          {'id': 102, 'uid': 999},
+          {'id': 103},
+        ],
+      },
+      'sharedPrivilege': {'status': 'SHARED', 'usePermission': 'NORMAL'},
+    });
+    expect(info.members.map((m) => m.nickname), ['我', '朋友']);
+    expect(info.adders['100']?.nickname, '朋友');
+    expect(info.adders['101']?.nickname, '我');
+    expect(info.adders['101']?.avatarUrl, 'https://p1.music.126.net/a.jpg');
+    // 已经退出的成员、没有 uid 的歌不显示添加人。
+    expect(info.adders.containsKey('102'), isFalse);
+    expect(info.adders.containsKey('103'), isFalse);
+  });
 }

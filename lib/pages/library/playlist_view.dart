@@ -13,14 +13,61 @@ import 'track_list_view.dart';
 
 /// 歌单内容：头部信息 + 播放全部 + 歌曲列表。歌单页和「我喜欢」共用。
 /// 别人的歌单在头部多一个「收藏」按钮。
-class PlaylistView extends StatelessWidget {
+class PlaylistView extends StatefulWidget {
   const PlaylistView({super.key, required this.playlist});
 
   final Playlist playlist;
 
   @override
+  State<PlaylistView> createState() => _PlaylistViewState();
+}
+
+class _PlaylistViewState extends State<PlaylistView> {
+  /// 共建歌单的成员和每首歌的添加人；普通歌单或还没取到时为 null。
+  SharedPlaylistInfo? _shared;
+  bool _sharedRequested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_sharedRequested && AccountScope.read(context).isShared(widget.playlist)) {
+      _sharedRequested = true;
+      _loadShared();
+    }
+  }
+
+  Future<void> _loadShared() async {
+    try {
+      final info = await AppScope.of(context).api.sharedPlaylistInfo(widget.playlist.id);
+      if (mounted) setState(() => _shared = info);
+    } catch (_) {
+      // 取不到就不显示添加人，成员头像用列表里的。
+    }
+  }
+
+  /// 歌曲下面的「某某 添加」。
+  Widget? _adderLine(Song song) {
+    final u = _shared?.adders[song.id];
+    if (u == null) return null;
+    return Row(
+      children: [
+        _MemberAvatar(name: u.nickname, url: u.avatarUrl, size: 16),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            '${u.nickname} 添加',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: context.colors.textMuted),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final p = playlist;
+    final p = widget.playlist;
     final tracks = AppScope.of(context).tracks;
     // 自己的歌单（含「我喜欢」）和收藏的歌单存本地缓存：先显示缓存，后台比对增删。
     final account = AccountScope.read(context);
@@ -31,6 +78,7 @@ class PlaylistView extends StatelessWidget {
       queueTitle: p.name,
       sourceId: p.id,
       emptyText: '歌单是空的',
+      footerFor: _shared == null ? null : _adderLine,
       // 自己的歌单和「我喜欢」可以删歌。
       onRemoveSongs: account.canEditTracks(p)
           ? (songs) async {
@@ -57,7 +105,7 @@ class PlaylistView extends StatelessWidget {
           ].join(' · '),
           ?p.description,
         ],
-        extra: account.isShared(p) ? _InviteRow(playlist: p) : null,
+        extra: account.isShared(p) ? _InviteRow(playlist: p, info: _shared) : null,
         onPlayAll: playAll,
         actions: [_SubscribeButton(playlist: p)],
       ),
@@ -111,41 +159,19 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
 }
 
 /// 共建歌单标题下的「邀请好友」：成员头像叠在一起，后面一个「+」，点了分享邀请。
-class _InviteRow extends StatefulWidget {
-  const _InviteRow({required this.playlist});
+class _InviteRow extends StatelessWidget {
+  const _InviteRow({required this.playlist, this.info});
 
   final Playlist playlist;
 
-  @override
-  State<_InviteRow> createState() => _InviteRowState();
-}
+  /// 歌单详情里的成员（带昵称和头像）。歌单列表里的成员只有 userId，取到详情前先用列表的。
+  final SharedPlaylistInfo? info;
 
-class _InviteRowState extends State<_InviteRow> {
   static const _size = 28.0;
   static const _step = 18.0;
 
-  /// 成员。歌单列表接口里的成员只有 userId，没有昵称和头像，这时再取一次歌单详情补全。
-  late List<SocialUser> _members = widget.playlist.sharedUsers;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_members.any((u) => u.nickname.isEmpty || u.avatarUrl == null)) _loadMembers();
-  }
-
-  Future<void> _loadMembers() async {
-    try {
-      final r = await AppScope.of(context).api.playlistTrackIds(widget.playlist.id);
-      if (mounted && r.playlist.sharedUsers.isNotEmpty) {
-        setState(() => _members = r.playlist.sharedUsers);
-      }
-    } catch (_) {
-      // 取不到就用列表里的，头像显示占位。
-    }
-  }
-
   void _invite() {
-    final p = widget.playlist;
+    final p = playlist;
     shareText(
       '我建了一个共建歌单「${p.name}」，来和我一起加歌吧：https://music.163.com/playlist?id=${p.id}',
       subject: '共建歌单',
@@ -160,14 +186,17 @@ class _InviteRowState extends State<_InviteRow> {
     final account = AccountScope.of(context);
     final me = account.profile;
     // 创建者在最前：自己的歌单用自己的头像，其他成员跟在后面。
-    final playlist = widget.playlist;
     final members = [
-      if (me != null && account.isOwn(playlist))
-        (name: me.nickname, url: me.avatarUrl)
-      else if (playlist.creator case final c?)
-        (name: c, url: null),
-      for (final u in _members)
-        if (u.userId != me?.userId) (name: u.nickname, url: u.avatarUrl),
+      if (info case final i? when i.members.isNotEmpty)
+        for (final u in i.members) (name: u.nickname, url: u.avatarUrl)
+      else ...[
+        if (me != null && account.isOwn(playlist))
+          (name: me.nickname, url: me.avatarUrl)
+        else if (playlist.creator case final c?)
+          (name: c, url: null),
+        for (final u in playlist.sharedUsers)
+          if (u.userId != me?.userId) (name: u.nickname, url: u.avatarUrl),
+      ],
     ].take(4).toList();
     Widget circle(Widget child, {Color? color}) => Container(
       width: _size,
@@ -227,6 +256,35 @@ class _InviteRowState extends State<_InviteRow> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 小圆头像：有图显示图，没有显示昵称首字。
+class _MemberAvatar extends StatelessWidget {
+  const _MemberAvatar({required this.name, required this.url, required this.size});
+
+  final String name;
+  final String? url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final u = url;
+    return SizedBox.square(
+      dimension: size,
+      child: CircleAvatar(
+        backgroundColor: scheme.secondaryContainer,
+        child: u == null
+            ? Text(
+                name.isEmpty ? '?' : name.characters.first,
+                style: TextStyle(fontSize: size * 0.5, color: scheme.onSecondaryContainer),
+              )
+            : ClipOval(
+                child: Image(image: retryImage(u), width: size, height: size, fit: BoxFit.cover),
+              ),
       ),
     );
   }

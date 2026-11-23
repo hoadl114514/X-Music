@@ -26,6 +26,7 @@ class TrackListView extends StatefulWidget {
     this.sourceId,
     this.emptyText = '这里还没有歌曲',
     this.trailingFor,
+    this.footerFor,
     this.searchable = true,
     this.onRemoveSongs,
   });
@@ -55,6 +56,9 @@ class TrackListView extends StatefulWidget {
 
   /// 每行右侧的附加信息（如听歌排行的播放次数）。
   final String? Function(int index)? trailingFor;
+
+  /// 每首歌下面多加的一行（可为 null）。
+  final Widget? Function(Song song)? footerFor;
 
   /// 在头部下面显示「搜索列表内歌曲」的输入框。
   final bool searchable;
@@ -308,6 +312,7 @@ class _TrackListViewState extends State<TrackListView> {
                       song: song,
                       index: i + 1,
                       trailing: widget.trailingFor?.call(i),
+                      footer: widget.footerFor?.call(song),
                       selected: selected?.contains(song.id),
                       onTap: selected == null ? () => _play(tracks, i) : () => _toggle(song.id),
                       onRemove: widget.onRemoveSongs == null ? null : () => _remove([song]),
