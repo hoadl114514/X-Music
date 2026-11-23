@@ -1581,9 +1581,13 @@ class NeteaseApi {
       description: _str(raw['updateFrequency']) ?? _str('${raw['description'] ?? ''}'.trim()),
       subscribed: raw['subscribed'] == true,
       isLikedList: _int(raw['specialType']) == 5,
-      // 共建歌单：字段名没有公开文档，几个可能的都认（普通歌单的 sharedUsers 是 null）。
+      // 共建歌单：真实账号抓到的是 specialType 300（还没人加入时 sharedUsers 也是 null）。
+      // 其他几个字段名是推测的，也一并认。
       shared:
-          raw['sharedUsers'] is List || raw['playlistType'] == 'SHARED' || raw['type'] == 'SHARED',
+          _int(raw['specialType']) == 300 ||
+          raw['sharedUsers'] is List ||
+          raw['playlistType'] == 'SHARED' ||
+          raw['type'] == 'SHARED',
       sharedUsers: [for (final u in _list(raw['sharedUsers'])) ?parseSocialUser(u)],
     );
   }
