@@ -946,3 +946,26 @@ class SharedPlaylistInfo {
   /// 歌曲 id → 添加这首歌的成员。
   final Map<String, SocialUser> adders;
 }
+
+/// 私人 FM 的模式（接口参数参考 api-enhanced 的 personal_fm_mode）。
+enum FmMode {
+  normal('推荐', '根据你的口味连续播放', 'DEFAULT'),
+  familiar('熟悉', '多放你听过、喜欢的', 'FAMILIAR'),
+  explore('探索', '多放没听过的新歌', 'EXPLORE'),
+  aiDj('AI DJ', '由 AI 帮你挑歌', 'aidj'),
+  exercise('运动', '适合运动时听', 'SCENE_RCMD', 'EXERCISE'),
+  focus('专注', '适合工作、学习时听', 'SCENE_RCMD', 'FOCUS'),
+  night('深夜', '安静的夜晚', 'SCENE_RCMD', 'NIGHT_EMO');
+
+  const FmMode(this.label, this.description, this.mode, [this.subMode]);
+
+  final String label;
+  final String description;
+
+  /// 接口的 mode / subMode。
+  final String mode;
+  final String? subMode;
+
+  static FmMode fromName(String? name) =>
+      values.firstWhere((m) => m.name == name, orElse: () => normal);
+}

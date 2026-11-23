@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
 import 'package:netease_client/app/services.dart';
+import 'package:netease_client/data/models.dart';
 import 'package:netease_client/pages/home_page.dart';
 
 import 'support/fakes.dart';
@@ -233,5 +234,18 @@ void main() {
     await settle(tester);
     expect(fetches(), 2);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('personal FM mode can be picked and is remembered', (tester) async {
+    final services = await pumpHome(tester, const Size(400, 1400));
+    expect(find.text('推荐模式'), findsOneWidget);
+    await tester.tap(find.text('推荐模式'));
+    await tester.pumpAndSettle();
+    expect(find.text('私人 FM 模式'), findsOneWidget);
+    expect(find.text('探索'), findsOneWidget);
+    await tester.tap(find.text('运动'));
+    await tester.pumpAndSettle();
+    expect(services.settings.fmMode, FmMode.exercise);
+    expect(find.text('运动模式'), findsOneWidget);
   });
 }

@@ -483,9 +483,15 @@ class NeteaseApi {
     ];
   }
 
-  /// 私人 FM 的下一批（一次约 3 首，需要登录）。
-  Future<List<Song>> personalFm() async {
-    final data = await _api('https://music.163.com/api/v1/radio/get', const {});
+  /// 私人 FM 的下一批（一次约 3 首，需要登录）。[mode] 不是默认模式时按模式推荐。
+  Future<List<Song>> personalFm({FmMode mode = FmMode.normal}) async {
+    final data = mode == FmMode.normal
+        ? await _api('https://music.163.com/api/v1/radio/get', const {})
+        : await _weapi('/api/v1/radio/get', {
+            'mode': mode.mode,
+            'subMode': ?mode.subMode,
+            'limit': 3,
+          });
     return [for (final s in _list(data['data'])) ?parseSong(s)];
   }
 

@@ -19,6 +19,7 @@ class AppSettings extends ChangeNotifier {
   final SharedPreferences _prefs;
 
   static const _kCookie = 'cookie';
+  static const _kFmMode = 'fm_mode';
   static const _kQuality = 'preferred_quality';
   static const _kLyricSource = 'lyric_source';
   static const _kTranslation = 'show_translation';
@@ -59,6 +60,10 @@ class AppSettings extends ChangeNotifier {
   AudioQuality get preferredQuality =>
       AudioQuality.fromLevel(_prefs.getString(_kQuality)) ?? AudioQuality.exhigh;
   set preferredQuality(AudioQuality v) => _set(() => _prefs.setString(_kQuality, v.level));
+
+  /// 私人 FM 的模式。
+  FmMode get fmMode => FmMode.fromName(_prefs.getString(_kFmMode));
+  set fmMode(FmMode v) => _set(() => _prefs.setString(_kFmMode, v.name));
 
   /// 移动网络下的音质；为 null 时和 [preferredQuality] 一样。
   AudioQuality? get mobileQuality => AudioQuality.fromLevel(_prefs.getString(_kMobileQuality));
