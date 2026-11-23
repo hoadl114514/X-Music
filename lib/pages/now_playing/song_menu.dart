@@ -23,7 +23,9 @@ Future<void> _sheet(BuildContext context, Widget child) => showModalBottomSheet<
 );
 
 /// 播放页 / 歌词页右上角「更多」：音质、歌词来源与显示、歌词偏移、歌曲操作。
-Future<void> showSongMenu(BuildContext context) => _sheet(context, const _SongMenu());
+/// [onWiki] 给了时多一项「歌曲百科」，点了收起菜单再调用它。
+Future<void> showSongMenu(BuildContext context, {VoidCallback? onWiki}) =>
+    _sheet(context, _SongMenu(onWiki: onWiki));
 
 /// 音质选择：只列出当前歌曲提供的档位。
 Future<void> showQualitySheet(BuildContext context) => _sheet(context, const _QualitySheet());
@@ -138,7 +140,9 @@ class _SleepSheet extends StatelessWidget {
 }
 
 class _SongMenu extends StatelessWidget {
-  const _SongMenu();
+  const _SongMenu({this.onWiki});
+
+  final VoidCallback? onWiki;
 
   static const _step = Duration(milliseconds: 500);
 
@@ -338,6 +342,16 @@ class _SongMenu extends StatelessWidget {
                   showAddToPlaylistSheet(nav.context, song);
                 },
               ),
+              if (onWiki case final wiki?)
+                ListTile(
+                  leading: Icon(Icons.auto_stories_outlined, color: context.colors.textPrimary),
+                  title: const Text('歌曲百科'),
+                  subtitle: const Text('曲风、标签、相似歌曲；在播放页向左滑也能看到'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    wiki();
+                  },
+                ),
               _ListenTogetherTile(
                 onTap: () {
                   final nav = Navigator.of(context);

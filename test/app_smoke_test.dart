@@ -145,13 +145,19 @@ void main() {
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(find.text('第0行翻译'), findsOneWidget);
 
-    // 播放页里右滑回封面，再左滑回歌词；歌词按钮已经去掉。
+    // 歌词在封面左边：左滑回封面，再左滑到百科；右滑两次回到歌词。歌词按钮已经去掉。
     final pages = find.byType(PageView);
-    await tester.fling(pages, const Offset(400, 0), 1500);
+    await tester.fling(pages, const Offset(-400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsNothing);
     expect(find.byTooltip('歌词'), findsNothing);
     await tester.fling(pages, const Offset(-400, 0), 1500);
+    await settle(tester);
+    // 假接口没有百科数据。
+    expect(find.text('这首歌暂时没有百科'), findsOneWidget);
+    await tester.fling(pages, const Offset(400, 0), 1500);
+    await settle(tester);
+    await tester.fling(pages, const Offset(400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsOneWidget);
 
@@ -217,6 +223,7 @@ void main() {
     // 「更多」里有一起听，点了打开一起听页面。
     await tester.tap(find.byTooltip('更多'));
     await settle(tester);
+    expect(find.text('歌曲百科'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('一起听'),
       100,

@@ -646,6 +646,91 @@ class NeteaseApi {
     ];
   }
 
+  /// 歌曲百科（官方播放页「百科」）。参考 api-enhanced 的 song_wiki_summary。
+  Future<SongWiki> songWiki(String id) async {
+    final data = await _eapi('/api/song/play/about/block/page', {'songId': id});
+    return parseSongWiki(data);
+  }
+
+  /// 不展示的百科条目：评论（纯听歌版没有评论）、乐谱（没有乐谱页）。
+  static const _skippedWikiItems = {'songComment', 'sheet'};
+
+  /// 解析百科接口的返回。单独拿出来方便测试。
+  static SongWiki parseSongWiki(Map<String, Object?> data) {
+    final d = data['data'];
+    final blocks = _list(d is Map ? d['blocks'] : null);
+    Map<Object?, Object?>? block(String code) =>
+        blocks.firstWhere((b) => b is Map && b['code'] == code, orElse: () => null)
+            as Map<Object?, Object?>?;
+    String? title(Object? ui, [String key = 'mainTitle']) {
+      if (ui is! Map) return null;
+      final t = ui[key];
+      return t is Map ? _str(t['title']) : null;
+    }
+
+    String? image(Object? ui) {
+      if (ui is! Map) return null;
+      final first = _list(ui['images']).firstOrNull;
+      return first is Map ? _https(_str(first['imageUrl'])) : null;
+    }
+
+    final facts = <({String label, List<String> values})>[];
+    for (final c in _list(block('SONG_PLAY_ABOUT_SONG_BASIC')?['creatives'])) {
+      if (c is! Map || _skippedWikiItems.contains(c['creativeType'])) continue;
+      final label = title(c['uiElement']);
+      if (label == null) continue;
+      final ui = c['uiElement'];
+      final values = <String>[
+        for (final r in _list(c['resources']))
+          if (r is Map) ?title(r['uiElement']),
+        if (ui is Map)
+          for (final l in _list(ui['textLinks']))
+            if (l is Map) ?_str(l['text']),
+      ];
+      if (values.isNotEmpty) facts.add((label: label, values: values));
+    }
+
+    final similar = <SongBrief>[
+      for (final c in _list(block('SONG_PLAY_ABOUT_SIMILAR_SONG')?['creatives']))
+        if (c is Map)
+          for (final r in _list(c['resources']))
+            if (r is Map && r['resourceType'] == 'SONG' && _str('${r['resourceId'] ?? ''}') != null)
+              if (title(r['uiElement']) case final name?)
+                SongBrief(
+                  id: '${r['resourceId']}',
+                  title: name,
+                  artist: switch (r['uiElement']) {
+                    final Map<Object?, Object?> ui =>
+                      _list(ui['subTitles'])
+                          .whereType<Map<Object?, Object?>>()
+                          .map((t) => _str(t['title']))
+                          .nonNulls
+                          .join(' / '),
+                    _ => '',
+                  },
+                  coverUrl: image(r['uiElement']),
+                ),
+    ];
+
+    final playlists = <Playlist>[
+      for (final c in _list(block('SONG_PLAY_ABOUT_RELATED_PLAYLIST')?['creatives']))
+        if (c is Map)
+          for (final r in _list(c['resources']))
+            if (r is Map && r['resourceType'] == 'PLAYLIST' && r['resourceId'] != null)
+              if (title(r['uiElement']) case final name?)
+                Playlist(
+                  id: '${r['resourceId']}',
+                  name: name,
+                  playCount: switch (r['resourceExt']) {
+                    final Map<Object?, Object?> ext => _int(ext['playCount']),
+                    _ => 0,
+                  },
+                  coverUrl: image(r['uiElement']),
+                ),
+    ];
+    return SongWiki(facts: facts, similar: similar, playlists: playlists);
+  }
+
   /// 热搜词。
   Future<List<String>> hotSearches() async {
     final data = await _api('https://music.163.com/api/hotsearchlist/get', const {});

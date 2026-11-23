@@ -882,3 +882,25 @@ class ListenTogetherSnapshot {
   final List<String> songIds;
   final ListenTogetherCommand? command;
 }
+
+/// 歌曲百科里的一首相关歌曲（只有列表展示用的信息，播放前再取详情）。
+class SongBrief {
+  const SongBrief({required this.id, required this.title, this.artist = '', this.coverUrl});
+
+  final String id;
+  final String title;
+  final String artist;
+  final String? coverUrl;
+}
+
+/// 歌曲百科：基本信息（曲风、标签、语种、BPM、获奖、影视节目……）、相似歌曲、相关歌单。
+class SongWiki {
+  const SongWiki({this.facts = const [], this.similar = const [], this.playlists = const []});
+
+  /// 每条是一个名称和它的若干个值，例如「曲风」→「流行-华语流行」。
+  final List<({String label, List<String> values})> facts;
+  final List<SongBrief> similar;
+  final List<Playlist> playlists;
+
+  bool get isEmpty => facts.isEmpty && similar.isEmpty && playlists.isEmpty;
+}

@@ -16,6 +16,7 @@ import '../../widgets/share.dart';
 import 'lyrics_view.dart';
 import 'player_controls.dart';
 import 'song_menu.dart';
+import 'song_wiki_view.dart';
 
 /// 从底部滑出的页面路由。
 Route<void> slideUpRoute(Widget page) => PageRouteBuilder<void>(
@@ -48,8 +49,8 @@ Future<void> openNowPlaying(BuildContext context, {bool showLyrics = false}) =>
 
 final _immersive = AppTheme.immersive();
 
-/// 全屏播放页：流光背景，中间左右滑动在「封面」和「歌词」两页间切换（歌词在右边），
-/// 下方控制区两页共用。下滑收起。
+/// 全屏播放页：流光背景，中间三页左右滑动：歌词 ← 封面 → 百科（默认停在封面，
+/// 右滑看歌词，左滑看百科），下方控制区三页共用。下滑收起。
 class NowPlayingPage extends StatefulWidget {
   const NowPlayingPage({super.key, this.initialLyrics = false});
 
@@ -62,7 +63,11 @@ class NowPlayingPage extends StatefulWidget {
 class _NowPlayingPageState extends State<NowPlayingPage> {
   static const _hPad = EdgeInsets.symmetric(horizontal: 24);
 
-  late final _pages = PageController(initialPage: widget.initialLyrics ? 1 : 0);
+  static const _lyricsPage = 0;
+  static const _coverPage = 1;
+  static const _wikiPage = 2;
+
+  late final _pages = PageController(initialPage: widget.initialLyrics ? _lyricsPage : _coverPage);
 
   void _goTo(int page) => _pages.animateToPage(
     page,
@@ -97,24 +102,31 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             // 滑动时页面从屏幕边缘进出，不会在留白处被切出一道硬边。
             child: Column(
               children: [
-                const Padding(padding: _hPad, child: _TopBar()),
+                Padding(
+                  padding: _hPad,
+                  child: _TopBar(onWiki: () => _goTo(_wikiPage)),
+                ),
                 Expanded(
                   child: PageView(
                     controller: _pages,
                     children: [
                       Padding(
                         padding: _hPad,
-                        child: _CoverPane(song: song, onTapCover: () => _goTo(1)),
+                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                       Padding(
                         padding: _hPad,
-                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(0)),
+                        child: _CoverPane(song: song, onTapCover: () => _goTo(_lyricsPage)),
+                      ),
+                      Padding(
+                        padding: _hPad,
+                        child: _WikiPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-                _PageDots(controller: _pages, count: 2),
+                _PageDots(controller: _pages, count: 3),
                 const SizedBox(height: 8),
                 const Padding(
                   padding: _hPad,
@@ -179,7 +191,10 @@ class _PageDots extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  const _TopBar({required this.onWiki});
+
+  /// 「更多」里点「歌曲百科」：翻到百科页。
+  final VoidCallback onWiki;
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +237,7 @@ class _TopBar extends StatelessWidget {
             ),
             RoundIconButton(
               icon: Icons.more_horiz_rounded,
-              onPressed: () => showSongMenu(context),
+              onPressed: () => showSongMenu(context, onWiki: onWiki),
               tooltip: '更多',
               color: Colors.white70,
               iconSize: 24,
@@ -291,7 +306,7 @@ class _CoverPane extends StatelessWidget {
   }
 }
 
-/// 歌词页：顶部小封面和歌名，下面是歌词。点顶部或向右滑回到封面。
+/// 歌词页（封面左边一页）：顶部小封面和歌名，下面是歌词。点顶部或向左滑回到封面。
 class _LyricsPane extends StatelessWidget {
   const _LyricsPane({required this.song, required this.onTapHeader});
 
@@ -334,6 +349,50 @@ class _LyricsPane extends StatelessWidget {
             shaderCallback: _fadeEdges,
             blendMode: BlendMode.dstIn,
             child: LyricsView(fontSize: 28, anchor: 0.25, depth: true),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 百科页（封面右边一页）：顶部小封面和歌名，下面是歌曲百科。点顶部或向右滑回到封面。
+class _WikiPane extends StatelessWidget {
+  const _WikiPane({required this.song, required this.onTapHeader});
+
+  final Song song;
+  final VoidCallback onTapHeader;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: onTapHeader,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 52,
+                child: CoverArt(
+                  palette: song.palette,
+                  seed: song.id,
+                  imageUrl: song.coverUrl,
+                  radius: 6,
+                  shadow: AppShadows.medium,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: _TitleRow(song: song, large: false)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ShaderMask(
+            shaderCallback: _fadeEdges,
+            blendMode: BlendMode.dstIn,
+            child: SongWikiView(song: song),
           ),
         ),
       ],
