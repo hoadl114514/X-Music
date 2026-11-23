@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../api/netease_api.dart';
 import '../../app/app.dart';
 import '../../data/format.dart';
 import '../../data/models.dart';
@@ -106,7 +107,9 @@ class _PlaylistViewState extends State<PlaylistView> {
           ].join(' · '),
           ?p.description,
         ],
-        extra: account.isShared(p) ? _InviteRow(playlist: p, info: _shared) : null,
+        extra: account.isShared(p)
+            ? _InviteRow(playlist: p, info: _shared, onMembersChanged: _loadShared)
+            : null,
         onPlayAll: playAll,
         actions: [_SubscribeButton(playlist: p)],
       ),
@@ -161,9 +164,12 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
 
 /// 共建歌单标题下的成员条：成员头像叠在一起，后面一个「管理」，点了打开成员管理面板。
 class _InviteRow extends StatelessWidget {
-  const _InviteRow({required this.playlist, this.info});
+  const _InviteRow({required this.playlist, this.info, this.onMembersChanged});
 
   final Playlist playlist;
+
+  /// 移出成员后调用，重新取成员。
+  final VoidCallback? onMembersChanged;
 
   /// 歌单详情里的成员（带昵称和头像）。歌单列表里的成员只有 userId，取到详情前先用列表的。
   final SharedPlaylistInfo? info;
@@ -179,6 +185,48 @@ class _InviteRow extends StatelessWidget {
       title: '邀请好友一起编辑歌单',
       copied: '已复制邀请链接',
     );
+  }
+
+  Future<bool> _confirm(BuildContext context, String text, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: Text(text),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            TextButton(onPressed: () => Navigator.pop(context, true), child: Text(action)),
+          ],
+        ),
+      ) ??
+      false;
+
+  Future<void> _remove(BuildContext sheetContext, SocialUser u) async {
+    final api = AppScope.of(sheetContext).api;
+    if (!await _confirm(sheetContext, '把「${u.nickname}」移出这个共享歌单？', '移出')) return;
+    try {
+      await api.removeSharedContributor(playlist.id, u.userId);
+      AppScope.toast('已移出 ${u.nickname}');
+      if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+      onMembersChanged?.call();
+    } on ApiException catch (e) {
+      AppScope.toast(e.message);
+    } catch (e) {
+      AppScope.toast('移出失败：$e');
+    }
+  }
+
+  Future<void> _leave(BuildContext sheetContext) async {
+    final account = AccountScope.read(sheetContext);
+    final navigator = Navigator.of(sheetContext);
+    if (!await _confirm(sheetContext, '退出后不能再往这个歌单加歌。确定退出？', '退出')) return;
+    try {
+      await account.setSubscribed(playlist, false);
+      AppScope.toast('已退出共享歌单');
+      navigator.pop(); // 关面板
+      if (navigator.canPop()) navigator.pop(); // 离开歌单页
+    } catch (e) {
+      AppScope.toast('退出失败：$e');
+    }
   }
 
   /// 成员管理面板：全部成员（创建者在最前），点成员进主页；底部邀请好友。
@@ -223,6 +271,13 @@ class _InviteRow extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(u.userId == creatorId ? '创建者' : '成员'),
+                              // 创建者和协作者都能移出别人；创建者不能被移出，自己走「退出」。
+                              trailing: u.userId == creatorId || u.userId == me?.userId
+                                  ? null
+                                  : TextButton(
+                                      onPressed: () => _remove(context, u),
+                                      child: const Text('移出'),
+                                    ),
                               onTap: () {
                                 Navigator.of(context).pop();
                                 openUser(context, u.userId, name: u.nickname);
@@ -242,6 +297,16 @@ class _InviteRow extends StatelessWidget {
                   label: const Text('邀请好友'),
                 ),
               ),
+              // 协作者退出：官方 App 用的是取消收藏歌单的接口。
+              if (me != null && creatorId != me.userId)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextButton(
+                    onPressed: () => _leave(context),
+                    style: TextButton.styleFrom(foregroundColor: context.colors.negative),
+                    child: const Text('退出共享歌单'),
+                  ),
+                ),
             ],
           ),
         ),

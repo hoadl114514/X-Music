@@ -100,6 +100,9 @@ void main() {
           'sharedPrivilege': {'status': 'SHARED', 'usePermission': 'NORMAL'},
         });
       }
+      if (path == '/eapi/playlist/shared/contributor/delete') {
+        return _json({'code': 200, 'data': true, 'message': ''});
+      }
       if (path == '/api/v3/song/detail') {
         return _json({
           'code': 200,
@@ -210,8 +213,15 @@ void main() {
     expect(find.text('创建者'), findsOneWidget);
     expect(find.text('好友'), findsOneWidget);
     expect(find.text('邀请好友'), findsOneWidget);
-    await tester.tapAt(const Offset(5, 5));
+    // 自己建的歌单：不显示「退出」；别的成员可以移出，创建者（自己）不行。
+    expect(find.text('退出共享歌单'), findsNothing);
+    expect(find.text('移出'), findsOneWidget);
+    await tester.tap(find.text('移出'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('移出').last);
+    await tester.pumpAndSettle();
+    expect(paths, contains('/eapi/playlist/shared/contributor/delete'));
+    expect(find.text('共享歌单成员 · 2 人'), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

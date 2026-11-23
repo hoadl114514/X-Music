@@ -312,6 +312,16 @@ class NeteaseApi {
     );
   }
 
+  /// 把 [userId] 移出共建歌单。官方 App 抓到的接口（安卓走 XEAPI，参数是 playlistId + userId），
+  /// 创建者和协作者都能移除别人。服务端返回 data 为 false 表示没移成（例如对方不是成员）。
+  Future<void> removeSharedContributor(String playlistId, int userId) async {
+    final data = await _eapi('/api/playlist/shared/contributor/delete', {
+      'playlistId': playlistId,
+      'userId': '$userId',
+    });
+    if (data['data'] != true) throw const ApiException('移出失败，对方可能已经不是成员');
+  }
+
   /// 共建歌单的成员和每首歌的添加人（歌单详情 trackIds 里的 uid）。
   Future<SharedPlaylistInfo> sharedPlaylistInfo(String id) async {
     final data = await _api('https://music.163.com/api/v6/playlist/detail', {'id': id, 'n': '0'});

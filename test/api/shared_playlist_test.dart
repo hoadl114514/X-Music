@@ -56,4 +56,19 @@ void main() {
     expect(info.adders.containsKey('102'), isFalse);
     expect(info.adders.containsKey('103'), isFalse);
   });
+
+  test('removing a contributor fails when the server says data false', () async {
+    var reply = <String, Object>{'code': 200, 'data': false, 'message': ''};
+    final paths = <String>[];
+    final api = NeteaseApi(
+      client: MockClient((r) async {
+        paths.add(r.url.path);
+        return http.Response(jsonEncode(reply), 200);
+      }),
+    );
+    await expectLater(api.removeSharedContributor('7', 2), throwsA(isA<ApiException>()));
+    reply = {'code': 200, 'data': true, 'message': ''};
+    await api.removeSharedContributor('7', 2);
+    expect(paths, everyElement('/eapi/playlist/shared/contributor/delete'));
+  });
 }
