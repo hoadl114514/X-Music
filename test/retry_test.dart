@@ -186,5 +186,32 @@ void main() {
       });
       expect(calls, 1);
     });
+
+    test('mirror URLs try the other NetEase image hosts, then http', () {
+      expect(mirrorUrls('https://p1.music.126.net/a==/1.jpg?param=128y128'), [
+        'https://p1.music.126.net/a==/1.jpg?param=128y128',
+        'https://p2.music.126.net/a==/1.jpg?param=128y128',
+        'https://p3.music.126.net/a==/1.jpg?param=128y128',
+        'https://p4.music.126.net/a==/1.jpg?param=128y128',
+        'http://p1.music.126.net/a==/1.jpg?param=128y128',
+      ]);
+      expect(mirrorUrls('https://a/1.png'), ['https://a/1.png']);
+    });
+
+    testWidgets('an unreachable NetEase host falls back to another one', (tester) async {
+      final hosts = <String>[];
+      RetryNetworkImage.retryDelays = const [Duration.zero];
+      RetryNetworkImage.clientFactory = () => MockClient((r) async {
+        hosts.add(r.url.host);
+        if (r.url.host == 'p1.music.126.net') throw http.ClientException('connection reset');
+        return http.Response.bytes(_png, 200);
+      });
+      final image = await tester.runAsync(
+        () => resolve(const RetryNetworkImage('https://p1.music.126.net/a==/1.jpg')),
+      );
+      expect(image!.width, 1);
+      // 原域名重试一次，然后换 p2 成功。
+      expect(hosts, ['p1.music.126.net', 'p1.music.126.net', 'p2.music.126.net']);
+    });
   });
 }
