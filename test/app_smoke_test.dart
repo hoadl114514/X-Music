@@ -145,19 +145,19 @@ void main() {
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(find.text('第0行翻译'), findsOneWidget);
 
-    // 歌词在封面左边：左滑回封面，再左滑到百科；右滑两次回到歌词。歌词按钮已经去掉。
+    // 歌词在封面右边：右滑回封面，再右滑到百科；左滑两次回到歌词。歌词按钮已经去掉。
     final pages = find.byType(PageView);
-    await tester.fling(pages, const Offset(-400, 0), 1500);
+    await tester.fling(pages, const Offset(400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsNothing);
     expect(find.byTooltip('歌词'), findsNothing);
-    await tester.fling(pages, const Offset(-400, 0), 1500);
+    await tester.fling(pages, const Offset(400, 0), 1500);
     await settle(tester);
     // 假接口没有百科数据。
     expect(find.text('这首歌暂时没有百科'), findsOneWidget);
-    await tester.fling(pages, const Offset(400, 0), 1500);
+    await tester.fling(pages, const Offset(-400, 0), 1500);
     await settle(tester);
-    await tester.fling(pages, const Offset(400, 0), 1500);
+    await tester.fling(pages, const Offset(-400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsOneWidget);
 

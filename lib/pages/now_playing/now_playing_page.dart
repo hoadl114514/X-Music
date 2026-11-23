@@ -63,9 +63,10 @@ class NowPlayingPage extends StatefulWidget {
 class _NowPlayingPageState extends State<NowPlayingPage> {
   static const _hPad = EdgeInsets.symmetric(horizontal: 24);
 
-  static const _lyricsPage = 0;
+  // 从左到右：百科、封面、歌词。右滑看百科，左滑看歌词。
+  static const _wikiPage = 0;
   static const _coverPage = 1;
-  static const _wikiPage = 2;
+  static const _lyricsPage = 2;
 
   late final _pages = PageController(initialPage: widget.initialLyrics ? _lyricsPage : _coverPage);
 
@@ -112,7 +113,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     children: [
                       Padding(
                         padding: _hPad,
-                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(_coverPage)),
+                        child: _WikiPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                       Padding(
                         padding: _hPad,
@@ -120,7 +121,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       ),
                       Padding(
                         padding: _hPad,
-                        child: _WikiPane(song: song, onTapHeader: () => _goTo(_coverPage)),
+                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                     ],
                   ),

@@ -647,9 +647,66 @@ class NeteaseApi {
   }
 
   /// 歌曲百科（官方播放页「百科」）。参考 api-enhanced 的 song_wiki_summary。
+  ///
+  /// 百科接口里的相似歌曲只有三首左右，再用相似歌曲接口补几首（失败不影响百科）。
   Future<SongWiki> songWiki(String id) async {
-    final data = await _eapi('/api/song/play/about/block/page', {'songId': id});
-    return parseSongWiki(data);
+    final more = similarSongs(id).catchError((Object _) => const <Song>[]);
+    final wiki = parseSongWiki(await _eapi('/api/song/play/about/block/page', {'songId': id}));
+    return wiki.withMoreSimilar([
+      for (final s in await more)
+        if (s.id != id) SongBrief(id: s.id, title: s.title, artist: s.artist, coverUrl: s.coverUrl),
+    ]);
+  }
+
+  /// 相似歌曲（最多 5 首左右）。参考 api-enhanced 的 simi_song。
+  Future<List<Song>> similarSongs(String id) async {
+    final data = await _weapi('/api/v1/discovery/simiSong', {
+      'songid': id,
+      'limit': 50,
+      'offset': 0,
+    });
+    return [for (final s in _list(data['songs'])) ?parseSong(s)];
+  }
+
+  /// 播放页百科里「关于艺人」卡片的资料：大图、简介、粉丝数、是否已关注、最新专辑。
+  ///
+  /// 粉丝数和最新专辑取不到时留空，只有歌手资料是必需的。
+  Future<ArtistProfile> artistProfile(String id) async {
+    final fans = _eapi('/api/artist/follow/count/get', {
+      'id': id,
+    }).then<Map<String, Object?>?>((d) => d, onError: (Object _) => null);
+    final latest = artistAlbums(
+      id,
+      limit: 1,
+    ).then<Album?>((r) => r.albums.firstOrNull, onError: (Object _) => null);
+    final head = await _eapi('/api/artist/head/info/get', {'id': id});
+    return parseArtistProfile(head, await fans, await latest);
+  }
+
+  /// 解析「关于艺人」的几个接口。单独拿出来方便测试。
+  static ArtistProfile parseArtistProfile(
+    Map<String, Object?> head,
+    Map<String, Object?>? fans,
+    Album? latestAlbum,
+  ) {
+    final d = head['data'];
+    final a = d is Map ? d['artist'] : null;
+    if (a is! Map || a['id'] == null) throw const ApiException('歌手不存在');
+    final f = fans?['data'];
+    return ArtistProfile(
+      artist: Artist(
+        id: '${a['id']}',
+        name: '${a['name'] ?? ''}',
+        avatarUrl: _https(_str(a['avatar'])),
+        description: _str(a['briefDesc'])?.trim(),
+        songCount: _int(a['musicSize']),
+        albumCount: _int(a['albumSize']),
+      ),
+      coverUrl: _https(_str(a['cover'])),
+      fans: f is Map ? _int(f['fansCnt']) : null,
+      followed: f is Map && (f['isFollow'] == true || f['follow'] == true),
+      latestAlbum: latestAlbum,
+    );
   }
 
   /// 不展示的百科条目：评论（纯听歌版没有评论）、乐谱（没有乐谱页）。

@@ -903,4 +903,35 @@ class SongWiki {
   final List<Playlist> playlists;
 
   bool get isEmpty => facts.isEmpty && similar.isEmpty && playlists.isEmpty;
+
+  /// 在相似歌曲后面补上 [more] 里还没有的歌。
+  SongWiki withMoreSimilar(List<SongBrief> more) {
+    final seen = {for (final s in similar) s.id};
+    return SongWiki(
+      facts: facts,
+      similar: [...similar, ...more.where((s) => seen.add(s.id))],
+      playlists: playlists,
+    );
+  }
+}
+
+/// 播放页百科里「关于艺人」卡片的资料。
+class ArtistProfile {
+  const ArtistProfile({
+    required this.artist,
+    this.coverUrl,
+    this.fans,
+    this.followed = false,
+    this.latestAlbum,
+  });
+
+  final Artist artist;
+
+  /// 横版大图；没有时用头像。
+  final String? coverUrl;
+
+  /// 粉丝数；取不到为 null。
+  final int? fans;
+  final bool followed;
+  final Album? latestAlbum;
 }
