@@ -141,8 +141,8 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
     final p = widget.playlist;
-    // 自己的歌单、「我喜欢」和未登录时不显示。
-    if (!account.isLoggedIn || p.isLikedList || account.isOwn(p)) {
+    // 自己的歌单、「我喜欢」、共建歌单和未登录时不显示。
+    if (!account.isLoggedIn || p.isLikedList || account.isOwn(p) || account.isShared(p)) {
       return const SizedBox.shrink();
     }
     final subscribed = account.isSubscribed(p.id);

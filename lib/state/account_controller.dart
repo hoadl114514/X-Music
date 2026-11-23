@@ -38,6 +38,19 @@ class AccountController extends ChangeNotifier {
       if (!p.isLikedList && p.creatorId == _profile?.userId) p,
   ];
 
+  /// 共建歌单：自己建的和加入的别人的，都放在音乐库的「共享歌单」里。
+  List<Playlist> get sharedPlaylists => [
+    for (final p in _playlists)
+      if (!p.isLikedList && isShared(p)) p,
+  ];
+
+  /// 能往里加歌的歌单：自己创建的，加上加入的别人的共建歌单。
+  /// 共建成员加歌和自己加歌是同一个接口，有没有权限由服务端判断。
+  List<Playlist> get addablePlaylists => [
+    for (final p in _playlists)
+      if (!p.isLikedList && (p.creatorId == _profile?.userId || isShared(p))) p,
+  ];
+
   /// 是否收藏了别人的歌单 [id]。
   bool isSubscribed(String id) => _playlists.any((p) => p.id == id && p.subscribed);
 

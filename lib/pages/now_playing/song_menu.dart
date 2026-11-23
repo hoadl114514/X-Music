@@ -50,7 +50,7 @@ class _AddToPlaylistSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
-    final own = account.ownPlaylists;
+    final own = account.addablePlaylists;
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.5,

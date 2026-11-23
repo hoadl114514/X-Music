@@ -64,10 +64,15 @@ class _LibraryPageState extends State<LibraryPage> {
     final account = AccountScope.of(context);
     if (!account.isLoggedIn) return const LoginPrompt(message: '登录后查看你的音乐库');
     final liked = account.likedPlaylist;
-    final created = account.ownPlaylists;
+    // 共建歌单（自己建的和加入的）单独一栏，不再出现在「创建的」「收藏的」里。
+    final shared = account.sharedPlaylists;
+    final created = [
+      for (final p in account.ownPlaylists)
+        if (!account.isShared(p)) p,
+    ];
     final collected = [
       for (final p in account.playlists)
-        if (!p.isLikedList && !account.isOwn(p)) p,
+        if (!p.isLikedList && !account.isOwn(p) && !account.isShared(p)) p,
     ];
     final hPad = MediaQuery.sizeOf(context).width < 600 ? 16.0 : 24.0;
 
@@ -143,6 +148,35 @@ class _LibraryPageState extends State<LibraryPage> {
                   icon: Icon(Icons.more_vert_rounded, color: context.colors.textSecondary),
                   onPressed: () => showPlaylistManageSheet(context, p),
                 ),
+              ),
+          const SizedBox(height: 16),
+          _SectionHeader(
+            title: '共享歌单',
+            count: shared.length,
+            padding: hPad,
+            action: TextButton.icon(
+              onPressed: () => showCreatePlaylistDialog(context, shared: true),
+              icon: const Icon(Icons.group_add_rounded, size: 20),
+              label: const Text('新建'),
+            ),
+          ),
+          if (shared.isEmpty)
+            const _Empty('还没有共享歌单')
+          else
+            for (final p in shared)
+              PlaylistTile(
+                playlist: p,
+                onReturned: _reload,
+                // 别人的共建歌单用默认的「N 首 · 创建者」。
+                subtitle: account.isOwn(p) ? '${p.trackCount} 首' : null,
+                // 自己建的可以管理；加入的别人的没有管理菜单。
+                trailing: account.isOwn(p)
+                    ? IconButton(
+                        tooltip: '管理歌单',
+                        icon: Icon(Icons.more_vert_rounded, color: context.colors.textSecondary),
+                        onPressed: () => showPlaylistManageSheet(context, p),
+                      )
+                    : null,
               ),
           const SizedBox(height: 16),
           _SectionHeader(title: '收藏的歌单', count: collected.length, padding: hPad),

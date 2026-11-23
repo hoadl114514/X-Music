@@ -63,6 +63,13 @@ void main() {
                 {'userId': 5},
               ],
             },
+            {
+              'id': 44,
+              'name': '朋友的共享',
+              'trackCount': 5,
+              'specialType': 300,
+              'creator': {'userId': 3, 'nickname': '朋友'},
+            },
             if (!unsubscribed)
               {
                 'id': 99,
@@ -139,7 +146,7 @@ void main() {
     expect(find.text('听歌排行'), findsOneWidget);
     expect(find.text('艺人'), findsOneWidget);
     // 「新建」可以选普通歌单或共建歌单。
-    await tester.tap(find.text('新建'));
+    await tester.tap(find.text('新建').first);
     await tester.pumpAndSettle();
     expect(find.text('共建歌单'), findsOneWidget);
     await tester.tapAt(const Offset(5, 5));
@@ -149,6 +156,15 @@ void main() {
     expect(find.text('自建歌单'), findsOneWidget);
     expect(find.text('收藏的歌单'), findsOneWidget);
     expect(find.text('别人的歌单'), findsOneWidget);
+    // 共建歌单单独一栏：自己建的和加入的别人的都在这里。
+    expect(find.text('共享歌单'), findsOneWidget);
+    expect(find.text('一起建的歌'), findsOneWidget);
+    expect(find.text('朋友的共享'), findsOneWidget);
+    expect(find.text('5 首 · 朋友'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('朋友的共享')).dy,
+      lessThan(tester.getTopLeft(find.text('收藏的歌单')).dy),
+    );
     // 「我喜欢」只在顶部卡片里，不重复出现在创建的歌单里。
     expect(find.text('3'), findsNothing);
 
