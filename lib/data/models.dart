@@ -125,6 +125,8 @@ class Playlist {
     this.description,
     this.subscribed = false,
     this.isLikedList = false,
+    this.shared = false,
+    this.sharedUsers = const [],
     this._palette,
   });
 
@@ -144,6 +146,12 @@ class Playlist {
 
   /// 账号的「我喜欢的音乐」。
   final bool isLikedList;
+
+  /// 共建歌单（创建时 type 为 SHARED，好友可以一起加歌）。
+  final bool shared;
+
+  /// 共建歌单里除创建者以外的成员。接口没给时为空。
+  final List<SocialUser> sharedUsers;
   final List<Color>? _palette;
 
   List<Color> get palette => _palette ?? fallbackPalette(id);
@@ -162,6 +170,8 @@ class Playlist {
           description: description,
           subscribed: subscribed,
           isLikedList: isLikedList,
+          shared: shared,
+          sharedUsers: sharedUsers,
           palette: _palette,
         );
 }
@@ -814,4 +824,148 @@ class StatusRcmd {
   /// 我当前的状态。
   final UserStatus? status;
   final List<StatusUser> users;
+}
+
+/// 一起听的状态：是否在房间里，房间号、房主、房间里的人。
+class ListenTogetherStatus {
+  const ListenTogetherStatus({
+    required this.inRoom,
+    this.roomId,
+    this.creatorId = 0,
+    this.users = const [],
+  });
+
+  final bool inRoom;
+  final String? roomId;
+  final int creatorId;
+  final List<SocialUser> users;
+}
+
+/// 一起听房间的最后一条播放指令。
+class ListenTogetherCommand {
+  const ListenTogetherCommand({
+    required this.songId,
+    required this.playing,
+    required this.progress,
+    required this.serverTime,
+    required this.clientSeq,
+    required this.userId,
+  });
+
+  final String songId;
+  final bool playing;
+
+  /// 发指令时的进度。
+  final Duration progress;
+
+  /// 服务器收到指令的时间（毫秒时间戳，接口字段 serverSeq）。不像时间戳时为 0。
+  final int serverTime;
+  final int clientSeq;
+  final int userId;
+
+  /// 按 [now] 推算的当前进度：暂停时就是 [progress]；播放时加上服务器收到指令后过去的时间。
+  /// 服务器时间不可信（缺失或和本机差太多）时，从 [receivedAt]（本机拿到快照的时间）算起。
+  Duration positionAt(DateTime now, {required DateTime receivedAt}) {
+    if (!playing) return progress;
+    final nowMs = now.millisecondsSinceEpoch;
+    final trusted = serverTime > 1000000000000 && (nowMs - serverTime).abs() < 600000;
+    final from = trusted ? serverTime : receivedAt.millisecondsSinceEpoch;
+    final elapsed = nowMs - from;
+    return progress + Duration(milliseconds: elapsed < 0 ? 0 : elapsed);
+  }
+}
+
+/// 一起听房间的快照：播放列表和最后一条指令（没有时为 null）。
+class ListenTogetherSnapshot {
+  const ListenTogetherSnapshot({required this.songIds, this.command});
+
+  final List<String> songIds;
+  final ListenTogetherCommand? command;
+}
+
+/// 歌曲百科里的一首相关歌曲（只有列表展示用的信息，播放前再取详情）。
+class SongBrief {
+  const SongBrief({required this.id, required this.title, this.artist = '', this.coverUrl});
+
+  final String id;
+  final String title;
+  final String artist;
+  final String? coverUrl;
+}
+
+/// 歌曲百科：基本信息（曲风、标签、语种、BPM、获奖、影视节目……）、相似歌曲、相关歌单。
+class SongWiki {
+  const SongWiki({this.facts = const [], this.similar = const [], this.playlists = const []});
+
+  /// 每条是一个名称和它的若干个值，例如「曲风」→「流行-华语流行」。
+  final List<({String label, List<String> values})> facts;
+  final List<SongBrief> similar;
+  final List<Playlist> playlists;
+
+  bool get isEmpty => facts.isEmpty && similar.isEmpty && playlists.isEmpty;
+
+  /// 在相似歌曲后面补上 [more] 里还没有的歌。
+  SongWiki withMoreSimilar(List<SongBrief> more) {
+    final seen = {for (final s in similar) s.id};
+    return SongWiki(
+      facts: facts,
+      similar: [...similar, ...more.where((s) => seen.add(s.id))],
+      playlists: playlists,
+    );
+  }
+}
+
+/// 播放页百科里「关于艺人」卡片的资料。
+class ArtistProfile {
+  const ArtistProfile({
+    required this.artist,
+    this.coverUrl,
+    this.fans,
+    this.followed = false,
+    this.latestAlbum,
+  });
+
+  final Artist artist;
+
+  /// 横版大图；没有时用头像。
+  final String? coverUrl;
+
+  /// 粉丝数；取不到为 null。
+  final int? fans;
+  final bool followed;
+  final Album? latestAlbum;
+}
+
+/// 共建歌单的成员（创建者在最前）和每首歌是谁添加的。
+class SharedPlaylistInfo {
+  const SharedPlaylistInfo({this.creator, this.members = const [], this.adders = const {}});
+
+  final SocialUser? creator;
+  final List<SocialUser> members;
+
+  /// 歌曲 id → 添加这首歌的成员。
+  final Map<String, SocialUser> adders;
+}
+
+/// 私人 FM 的模式（接口参数参考 api-enhanced 的 personal_fm_mode）。
+enum FmMode {
+  normal('推荐', '根据你的口味连续播放', 'DEFAULT'),
+  familiar('熟悉', '多放你听过、喜欢的', 'FAMILIAR'),
+  explore('探索', '多放没听过的新歌', 'EXPLORE'),
+  aiDj('AI DJ', '由 AI 帮你挑歌', 'aidj'),
+  exercise('运动', '适合运动时听', 'SCENE_RCMD', 'EXERCISE'),
+  focus('专注', '适合工作、学习时听', 'SCENE_RCMD', 'FOCUS'),
+  night('深夜', '安静的夜晚', 'SCENE_RCMD', 'NIGHT_EMO');
+
+  const FmMode(this.label, this.description, this.mode, [this.subMode]);
+
+  final String label;
+  final String description;
+
+  /// 接口的 mode / subMode。
+  final String mode;
+  final String? subMode;
+
+  static FmMode fromName(String? name) =>
+      values.firstWhere((m) => m.name == name, orElse: () => normal);
 }

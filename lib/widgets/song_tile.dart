@@ -18,6 +18,7 @@ class SongTile extends StatelessWidget {
     this.trailing,
     this.onRemove,
     this.selected,
+    this.footer,
   });
 
   final Song song;
@@ -30,6 +31,9 @@ class SongTile extends StatelessWidget {
 
   /// 多选模式下是否选中；为 null 表示不在多选模式（显示「更多」按钮）。
   final bool? selected;
+
+  /// 歌手那一行下面再加的一行，例如共建歌单里「谁添加的」。
+  final Widget? footer;
 
   /// 序号（从 1 开始）。为 null 时不显示。
   final int? index;
@@ -104,6 +108,7 @@ class SongTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                   ),
+                  if (footer case final f?) ...[const SizedBox(height: 3), f],
                 ],
               ),
             ),

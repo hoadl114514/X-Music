@@ -39,7 +39,8 @@ void main() {
     await tester.pumpWidget(NeteaseClientApp(services: f.services));
     await tester.pump();
 
-    await tester.tap(find.text('搜索音乐、歌手'));
+    // 底栏的「搜索」标签。
+    await tester.tap(find.byTooltip('搜索').last);
     await tester.pumpAndSettle();
     expect(find.text('热搜一'), findsOneWidget);
 

@@ -64,17 +64,18 @@ class RetryNetworkImage extends ImageProvider<RetryNetworkImage> {
           await ImageDiskCache.remove(key.url);
         }
       }
-      return await withRetry(
-        () async {
-          final bytes = await _fetch(key.url, chunks);
-          final codec = await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
-          // 能解码才存，免得存进坏图。
-          unawaited(ImageDiskCache.write(key.url, bytes));
-          return codec;
-        },
-        delays: retryDelays,
-        retryIf: isRetryableImageError,
-      );
+      // 网易云图片在 p1–p4 几个域名上都有，有的网络（比如部分代理）连不上其中某个。
+      // 当前地址重试完还不行，就换其他域名各试一次；存缓存仍用原地址。
+      Object? firstError;
+      for (final (i, url) in mirrorUrls(key.url).indexed) {
+        try {
+          return await _fetchDecoded(key, url, chunks, decode, retry: i == 0);
+        } catch (e) {
+          firstError ??= e;
+          if (e is ImageHttpException && e.statusCode == 404) break;
+        }
+      }
+      throw firstError!;
     } catch (_) {
       // 失败的不要留在缓存里，下次重新取。
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
@@ -83,6 +84,24 @@ class RetryNetworkImage extends ImageProvider<RetryNetworkImage> {
       unawaited(chunks.close());
     }
   }
+
+  Future<ui.Codec> _fetchDecoded(
+    RetryNetworkImage key,
+    String url,
+    StreamController<ImageChunkEvent> chunks,
+    ImageDecoderCallback decode, {
+    required bool retry,
+  }) => withRetry(
+    () async {
+      final bytes = await _fetch(url, chunks);
+      final codec = await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
+      // 能解码才存，免得存进坏图。
+      unawaited(ImageDiskCache.write(key.url, bytes));
+      return codec;
+    },
+    delays: retry ? retryDelays : const [],
+    retryIf: isRetryableImageError,
+  );
 
   static Future<Uint8List> _fetch(String url, StreamController<ImageChunkEvent> chunks) async {
     final client = clientFactory?.call() ?? http.Client();
@@ -144,6 +163,23 @@ bool isRetryableImageError(Object e) {
     return e.empty || e.truncated || s >= 500 || s == 408 || s == 429;
   }
   return true;
+}
+
+/// 同一张网易云图片的几个地址：先原地址，再换 p1–p4 里的其他域名，最后试 http。
+/// 不是网易云图床的地址只返回它自己。
+@visibleForTesting
+List<String> mirrorUrls(String url) {
+  final m = RegExp(r'^(https?)://p(\d)\.music\.126\.net/').firstMatch(url);
+  if (m == null) return [url];
+  final rest = url.substring(m.end);
+  final scheme = m[1]!;
+  final n = m[2]!;
+  return [
+    url,
+    for (final h in ['1', '2', '3', '4'])
+      if (h != n) '$scheme://p$h.music.126.net/$rest',
+    if (scheme == 'https') 'http://p$n.music.126.net/$rest',
+  ];
 }
 
 /// 带自动重试的网络图片。[cacheWidth] 和 [Image.network] 里的一样，按这个宽度解码省内存。

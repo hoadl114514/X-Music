@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
-import 'package:netease_client/pages/comments/comments_page.dart';
+import 'package:netease_client/pages/listen_together_page.dart';
+import 'package:netease_client/pages/login_page.dart';
+import 'package:netease_client/shell/pill_nav_bar.dart';
 import 'package:netease_client/pages/now_playing/lyrics_copy.dart';
 import 'package:netease_client/pages/now_playing/now_playing_page.dart';
 
@@ -43,7 +45,7 @@ void main() {
     await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -600));
     await settle(tester);
     expect(find.text('推荐歌单'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(PillNavBar), findsOneWidget);
     // 没有在放的歌时不显示迷你播放条。
     expect(find.byTooltip('歌词'), findsNothing);
 
@@ -52,27 +54,34 @@ void main() {
     expect(find.text('登录后查看你的音乐库'), findsOneWidget);
   });
 
-  testWidgets('avatar opens drawer; recent plays asks to log in', (tester) async {
+  testWidgets('the more menu offers settings and account; account asks to log in', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.byTooltip('个人中心'));
+    expect(find.byType(Drawer), findsNothing);
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
-    expect(find.text('未登录'), findsOneWidget);
-    expect(find.text('听歌排行'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('账户'), findsOneWidget);
 
-    await tester.tap(find.text('最近播放'));
+    await tester.tap(find.text('账户'));
     await settle(tester);
-    expect(find.text('未登录'), findsNothing);
-    expect(find.text('登录后查看最近播放'), findsOneWidget);
+    expect(find.byType(LoginPage), findsOneWidget);
   });
 
   testWidgets('settings tab exposes quality, lyric source and login methods', (tester) async {
     await pumpApp(tester, withQueue: false);
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
     await tester.tap(find.text('设置'));
     await settle(tester);
     expect(find.text('默认音质'), findsOneWidget);
+    expect(find.text('移动网络播放音质'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('USB DAC 独占模式'), 200);
+    expect(find.text('输出通道'), findsOneWidget);
+    expect(find.text('输出位深'), findsOneWidget);
+    expect(find.text('输出采样率'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('默认歌词来源'), -200);
     expect(find.text('默认歌词来源'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('登录账号'), -200);
     await tester.tap(find.text('登录账号'));
     await settle(tester);
     // 默认是扫码；假接口没给 key，显示错误而不是一直转圈。
@@ -85,7 +94,7 @@ void main() {
 
   testWidgets('settings: audio cache limit can be picked or typed in', (tester) async {
     await pumpApp(tester, withQueue: false);
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
     await tester.tap(find.text('设置'));
     await settle(tester);
@@ -136,12 +145,18 @@ void main() {
     expect(find.byType(NowPlayingPage), findsOneWidget);
     expect(find.text('第0行翻译'), findsOneWidget);
 
-    // 播放页里右滑回封面，再左滑回歌词；歌词按钮已经去掉。
+    // 歌词在封面右边：右滑回封面，再右滑到百科；左滑两次回到歌词。歌词按钮已经去掉。
     final pages = find.byType(PageView);
     await tester.fling(pages, const Offset(400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsNothing);
     expect(find.byTooltip('歌词'), findsNothing);
+    await tester.fling(pages, const Offset(400, 0), 1500);
+    await settle(tester);
+    // 假接口没有百科数据。
+    expect(find.text('这首歌暂时没有百科'), findsOneWidget);
+    await tester.fling(pages, const Offset(-400, 0), 1500);
+    await settle(tester);
     await tester.fling(pages, const Offset(-400, 0), 1500);
     await settle(tester);
     expect(find.text('第0行翻译'), findsOneWidget);
@@ -195,16 +210,27 @@ void main() {
     expect(find.text('复制歌名 - 歌手'), findsOneWidget);
   });
 
-  testWidgets('now playing opens the song comments', (tester) async {
+  testWidgets('now playing has add-to-playlist and hides listen bar outside rooms', (tester) async {
     await pumpApp(tester);
     await tester.tap(find.text('歌曲1').last);
     await settle(tester);
-    await tester.tap(find.byTooltip('评论'));
+    expect(find.byTooltip('收藏到歌单'), findsOneWidget);
+    expect(find.byTooltip('一起听'), findsNothing);
+    expect(find.byType(ListenTogetherBar), findsOneWidget);
+    expect(find.byTooltip('退出房间'), findsNothing);
+    expect(find.byTooltip('结束房间'), findsNothing);
+
+    // 「更多」里有一起听，点了打开一起听页面。
+    await tester.tap(find.byTooltip('更多'));
     await settle(tester);
-    expect(find.byType(CommentsPage), findsOneWidget);
-    expect(find.text('热门'), findsOneWidget);
-    expect(find.text('最新'), findsOneWidget);
-    expect(find.text('还没有评论，来抢沙发吧 ~'), findsOneWidget);
-    expect(find.text('说点什么吧'), findsOneWidget);
+    expect(find.text('歌曲百科'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('一起听'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('一起听'));
+    await settle(tester);
+    expect(find.byType(ListenTogetherPage), findsOneWidget);
   });
 }

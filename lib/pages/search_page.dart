@@ -20,10 +20,13 @@ import 'music/nav.dart';
 /// 输入框为空时显示搜索历史和热搜；
 /// 提交后显示单曲 / 歌单 / 歌手 / 专辑四个标签，各自滚到底自动加载下一页。
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key, this.keyword = ''});
+  const SearchPage({super.key, this.keyword = '', this.embedded = false});
 
   /// 为空时进入输入状态。
   final String keyword;
+
+  /// 作为底栏的「搜索」标签显示：没有返回键，不自动弹键盘，底栏由主框架提供。
+  final bool embedded;
 
   /// 直接搜索 [keyword]。
   static Future<void> open(BuildContext context, String keyword) {
@@ -81,11 +84,12 @@ class _SearchPageState extends State<SearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 0,
+        automaticallyImplyLeading: !widget.embedded,
+        titleSpacing: widget.embedded ? 16 : 0,
         title: TextField(
           controller: _input,
           focusNode: _focus,
-          autofocus: !_showResults,
+          autofocus: !_showResults && !widget.embedded,
           textInputAction: TextInputAction.search,
           onSubmitted: _search,
           // 一改输入就回到联想状态。
@@ -127,8 +131,8 @@ class _SearchPageState extends State<SearchPage> {
       body: _showResults
           ? _Results(key: ValueKey(_keyword), keyword: _keyword)
           : _Suggestions(input: _input, onSearch: _search),
-      extendBody: true,
-      bottomNavigationBar: const FloatingBottomBar(),
+      extendBody: !widget.embedded,
+      bottomNavigationBar: widget.embedded ? null : const FloatingBottomBar(),
     );
   }
 }
@@ -181,7 +185,7 @@ class _Results extends StatelessWidget {
                   key: ValueKey('artist:$k'),
                   noun: '歌手',
                   fetch: (offset) => api.searchArtists(k, limit: _pageSize, offset: offset),
-                  itemBuilder: (context, items, i) => _ArtistTile(artist: items[i]),
+                  itemBuilder: (context, items, i) => ArtistTile(artist: items[i]),
                 ),
                 _PagedResults<Album>(
                   key: ValueKey('album:$k'),
@@ -557,8 +561,9 @@ class _PagedResultsState<T> extends State<_PagedResults<T>> with AutomaticKeepAl
   }
 }
 
-class _ArtistTile extends StatelessWidget {
-  const _ArtistTile({required this.artist});
+/// 歌手一行：圆形头像、名字、单曲和专辑数，点了进歌手页。搜索结果和已关注的艺人共用。
+class ArtistTile extends StatelessWidget {
+  const ArtistTile({super.key, required this.artist});
 
   final Artist artist;
 
@@ -582,7 +587,8 @@ class _ArtistTile extends StatelessWidget {
       ),
       title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        '单曲 ${a.songCount} · 专辑 ${a.albumCount}',
+        // 已关注列表的接口不带单曲数。
+        a.songCount > 0 ? '单曲 ${a.songCount} · 专辑 ${a.albumCount}' : '专辑 ${a.albumCount}',
         style: TextStyle(color: context.colors.textSecondary),
       ),
       onTap: () => openArtist(context, ArtistRef(a.id, a.name)),

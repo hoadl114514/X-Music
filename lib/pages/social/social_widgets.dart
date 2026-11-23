@@ -46,6 +46,7 @@ class FollowButton extends StatefulWidget {
     this.artistId,
     required this.followed,
     this.compact = false,
+    this.translucent = false,
     this.onChanged,
   }) : assert(userId != null || artistId != null);
 
@@ -58,6 +59,9 @@ class FollowButton extends StatefulWidget {
 
   /// 列表里用的小号按钮。
   final bool compact;
+
+  /// 放在图片或深色背景上：半透明白底的胶囊按钮。
+  final bool translucent;
   final ValueChanged<bool>? onChanged;
 
   @override
@@ -143,6 +147,21 @@ class _FollowButtonState extends State<FollowButton> {
     if (self) return const SizedBox.shrink();
     final density = widget.compact ? VisualDensity.compact : VisualDensity.standard;
     final onPressed = _busy ? null : _toggle;
+    if (widget.translucent) {
+      return TextButton.icon(
+        onPressed: onPressed,
+        icon: _followed ? null : const Icon(Icons.add_rounded, size: 18),
+        label: Text(_followed ? '已关注' : '关注'),
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.white.withValues(alpha: 0.16),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          visualDensity: density,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      );
+    }
     if (_followed) {
       return OutlinedButton(
         onPressed: onPressed,

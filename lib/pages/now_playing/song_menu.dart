@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../listen_together_page.dart';
 import '../../app/app.dart';
 import '../../data/models.dart';
 import '../../state/player_controller.dart';
@@ -8,10 +9,8 @@ import '../../theme/app_theme.dart';
 import '../../state/account_controller.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/playlist_card.dart';
-import '../comments/comments_page.dart';
 import '../login_page.dart';
 import '../music/nav.dart';
-import '../social/compose_event_page.dart';
 import '../../widgets/copy_sheet.dart';
 import 'lyrics_copy.dart';
 
@@ -24,7 +23,9 @@ Future<void> _sheet(BuildContext context, Widget child) => showModalBottomSheet<
 );
 
 /// 播放页 / 歌词页右上角「更多」：音质、歌词来源与显示、歌词偏移、歌曲操作。
-Future<void> showSongMenu(BuildContext context) => _sheet(context, const _SongMenu());
+/// [onWiki] 给了时多一项「歌曲百科」，点了收起菜单再调用它。
+Future<void> showSongMenu(BuildContext context, {VoidCallback? onWiki}) =>
+    _sheet(context, _SongMenu(onWiki: onWiki));
 
 /// 音质选择：只列出当前歌曲提供的档位。
 Future<void> showQualitySheet(BuildContext context) => _sheet(context, const _QualitySheet());
@@ -49,7 +50,7 @@ class _AddToPlaylistSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
-    final own = account.ownPlaylists;
+    final own = account.addablePlaylists;
     return SafeArea(
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.5,
@@ -139,7 +140,9 @@ class _SleepSheet extends StatelessWidget {
 }
 
 class _SongMenu extends StatelessWidget {
-  const _SongMenu();
+  const _SongMenu({this.onWiki});
+
+  final VoidCallback? onWiki;
 
   static const _step = Duration(milliseconds: 500);
 
@@ -331,15 +334,6 @@ class _SongMenu extends StatelessWidget {
                   }),
                 ),
               ListTile(
-                leading: Icon(Icons.mode_comment_outlined, color: context.colors.textPrimary),
-                title: const Text('查看评论'),
-                onTap: () {
-                  final nav = Navigator.of(context);
-                  nav.pop();
-                  CommentsPage.openSong(nav.context, song);
-                },
-              ),
-              ListTile(
                 leading: Icon(Icons.playlist_add_rounded, color: context.colors.textPrimary),
                 title: const Text('收藏到歌单'),
                 onTap: () {
@@ -348,13 +342,21 @@ class _SongMenu extends StatelessWidget {
                   showAddToPlaylistSheet(nav.context, song);
                 },
               ),
-              ListTile(
-                leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
-                title: const Text('分享到动态'),
+              if (onWiki case final wiki?)
+                ListTile(
+                  leading: Icon(Icons.auto_stories_outlined, color: context.colors.textPrimary),
+                  title: const Text('歌曲百科'),
+                  subtitle: const Text('曲风、标签、相似歌曲；在播放页向左滑也能看到'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    wiki();
+                  },
+                ),
+              _ListenTogetherTile(
                 onTap: () {
                   final nav = Navigator.of(context);
                   nav.pop();
-                  ComposeEventPage.open(nav.context, song: song);
+                  ListenTogetherPage.open(nav.context);
                 },
               ),
               ListTile(
@@ -525,6 +527,30 @@ class _QueueSheetState extends State<_QueueSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 「更多」里的一起听：在房间里时显示人数，点了打开一起听页面。
+class _ListenTogetherTile extends StatelessWidget {
+  const _ListenTogetherTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final listen = AppScope.of(context).listen;
+    return ListenableBuilder(
+      listenable: listen,
+      builder: (context, _) => ListTile(
+        leading: Icon(
+          listen.active ? Icons.headphones_rounded : Icons.headphones_outlined,
+          color: listen.active ? context.colors.accent : context.colors.textPrimary,
+        ),
+        title: const Text('一起听'),
+        subtitle: Text(listen.active ? '在房间里 · ${listen.users.length} 人' : '开个房间，和好友同步听歌'),
+        onTap: onTap,
       ),
     );
   }

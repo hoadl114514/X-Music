@@ -133,10 +133,11 @@ Future<void> _pump(WidgetTester tester, MockClient client, Widget page) async {
 }
 
 void main() {
-  testWidgets('a plain user has the home and events tabs with taste and playlists', (tester) async {
+  testWidgets('a plain user has no tabs, only taste and playlists', (tester) async {
     await _pump(tester, _client(publicRecord: false), const UserPage(userId: 100));
-    expect(find.text('主页'), findsOneWidget);
-    expect(find.text('动态'), findsOneWidget);
+    // 动态已经砍掉，普通用户只剩主页一页，不显示标签栏。
+    expect(find.text('主页'), findsNothing);
+    expect(find.text('动态'), findsNothing);
     expect(find.text('全部歌曲'), findsNothing);
     expect(find.text('某人'), findsWidgets);
     expect(find.textContaining('粉丝 45'), findsOneWidget);
@@ -157,15 +158,6 @@ void main() {
     await tester.tap(find.text('查看全部'));
     await tester.pumpAndSettle();
     expect(find.text('歌单6'), findsOneWidget);
-  });
-
-  testWidgets('the events tab lists the user events with the shared song', (tester) async {
-    await _pump(tester, _client(), const UserPage(userId: 100));
-    await tester.tap(find.text('动态'));
-    await tester.pumpAndSettle();
-    expect(find.text('今天听这首'), findsOneWidget);
-    expect(find.textContaining('分享单曲', findRichText: true), findsOneWidget);
-    expect(find.text('热歌3'), findsOneWidget);
   });
 
   testWidgets('tapping the follow count opens the follow list', (tester) async {

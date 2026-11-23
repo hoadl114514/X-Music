@@ -482,9 +482,12 @@ class _SongRcmdRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final song = item.song;
-    final playing = PlayerScope.of(context).current?.id == song.id;
+    final player = PlayerScope.of(context);
+    final playing = player.current?.id == song.id;
     final liked = AccountScope.of(context).isLiked(song.id);
     void play() => PlayerScope.read(context).playQueue(songs, start: index, title: '为你推荐');
+    // 正在放的这首：按钮变成暂停 / 继续，不从头再放。
+    final sounding = playing && player.isPlaying;
     // 推荐理由优先，没有时显示音质角标，和官方一样两者只显示一个。
     final badge = item.tag ?? item.quality;
     return SizedBox(
@@ -545,10 +548,13 @@ class _SongRcmdRow extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '播放',
+              tooltip: sounding ? '暂停' : (playing ? '继续播放' : '播放'),
               visualDensity: VisualDensity.compact,
-              onPressed: play,
-              icon: Icon(Icons.play_arrow_rounded, color: context.colors.textSecondary),
+              onPressed: playing ? () => PlayerScope.read(context).toggle() : play,
+              icon: Icon(
+                sounding ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: playing ? context.colors.accent : context.colors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -605,7 +611,7 @@ class _Greeting extends StatelessWidget {
         Text(switch (AccountScope.of(context).profile) {
           final p? => '${greetingFor(DateTime.now())}，${p.nickname}',
           null => greetingFor(DateTime.now()),
-        }, style: text.headlineMedium?.copyWith(color: context.scheme.onSurface)),
+        }, style: text.titleLarge?.copyWith(color: context.scheme.onSurface)),
         const SizedBox(height: 4),
         Text('由此开启好心情 ~', style: text.bodyLarge?.copyWith(color: context.scheme.onSurfaceVariant)),
       ],
@@ -789,17 +795,69 @@ class _DailyCardState extends State<_DailyCard> {
   }
 }
 
+const _fmIcons = {
+  FmMode.normal: Icons.radio_rounded,
+  FmMode.familiar: Icons.favorite_rounded,
+  FmMode.explore: Icons.explore_rounded,
+  FmMode.aiDj: Icons.auto_awesome_rounded,
+  FmMode.exercise: Icons.directions_run_rounded,
+  FmMode.focus: Icons.center_focus_strong_rounded,
+  FmMode.night: Icons.nightlight_round,
+};
+
 class _PersonalFmCard extends StatelessWidget {
   const _PersonalFmCard();
 
   Future<void> _start(BuildContext context) async {
     if (!AccountScope.read(context).isLoggedIn) return LoginPage.open(context);
-    final api = AppScope.of(context).api;
+    final services = AppScope.of(context);
+    final mode = services.settings.fmMode;
     try {
-      await PlayerScope.read(context).playRadio(api.personalFm, title: '私人 FM');
+      await PlayerScope.read(context)
+          .playRadio(() => services.api.personalFm(mode: mode), title: _title(mode));
     } catch (e) {
       AppScope.toast('私人 FM 加载失败：$e');
     }
+  }
+
+  static String _title(FmMode mode) => mode == FmMode.normal ? '私人 FM' : '私人 FM · ${mode.label}';
+
+  /// 选模式：存下来；正在放私人 FM 时按新模式重新开始。
+  Future<void> _pickMode(BuildContext context) async {
+    final settings = AppScope.of(context).settings;
+    final picked = await showModalBottomSheet<FmMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  '私人 FM 模式',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+              for (final m in FmMode.values)
+                ListTile(
+                  leading: Icon(_fmIcons[m]),
+                  title: Text(m.label),
+                  subtitle: Text(m.description),
+                  trailing: m == settings.fmMode
+                      ? Icon(Icons.check_rounded, color: context.colors.accent)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(m),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !context.mounted || picked == settings.fmMode) return;
+    settings.fmMode = picked;
+    if (PlayerScope.read(context).isRadio) await _start(context);
   }
 
   @override
@@ -832,7 +890,37 @@ class _PersonalFmCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('私人 FM', style: text.titleLarge?.copyWith(color: scheme.onPrimaryContainer)),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
+                ListenableBuilder(
+                  listenable: AppScope.of(context).settings,
+                  builder: (context, _) {
+                    final mode = AppScope.of(context).settings.fmMode;
+                    return InkWell(
+                      onTap: () => _pickMode(context),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_fmIcons[mode], size: 16, color: scheme.onPrimaryContainer),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${mode.label}模式',
+                              style: text.labelLarge?.copyWith(color: scheme.onPrimaryContainer),
+                            ),
+                            Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 20,
+                              color: scheme.onPrimaryContainer,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 2),
                 Text(
                   playing == null ? '根据你的口味连续播放' : '正在播放：${playing.title} - ${playing.artist}',
                   maxLines: 2,

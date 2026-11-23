@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app/app.dart';
+import '../pages/listen_together_page.dart';
 import '../pages/now_playing/now_playing_page.dart';
 import '../state/player_controller.dart';
 import '../data/models.dart';
@@ -37,64 +39,116 @@ class PlayerBar extends StatelessWidget {
       index: 0,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          height: height,
-          decoration: BoxDecoration(
-            color: cover.primaryContainer,
-            borderRadius: BorderRadius.circular(AppRadius.panel),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            // 撑满卡片高度，歌曲信息和按钮在卡片里垂直居中。
-            fit: StackFit.expand,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 8, right: 6),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _SwipeToSkip(
-                        current: song,
-                        previous: player.peekPrevious,
-                        next: player.peekNext,
-                        onPrevious: () => player.previous(restart: false),
-                        onNext: player.next,
-                        onTap: () => openNowPlaying(context),
+        child: _WithListeners(
+          ring: cover.primaryContainer,
+          background: cover.primary,
+          foreground: cover.onPrimary,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            height: height,
+            decoration: BoxDecoration(
+              color: cover.primaryContainer,
+              borderRadius: BorderRadius.circular(AppRadius.panel),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              // 撑满卡片高度，歌曲信息和按钮在卡片里垂直居中。
+              fit: StackFit.expand,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _SwipeToSkip(
+                          current: song,
+                          previous: player.peekPrevious,
+                          next: player.peekNext,
+                          onPrevious: () => player.previous(restart: false),
+                          onNext: player.next,
+                          onTap: () => openNowPlaying(context),
+                          color: fg,
+                        ),
+                      ),
+                      RoundIconButton(
+                        icon: Icons.lyrics_outlined,
+                        onPressed: () => openNowPlaying(context, showLyrics: true),
+                        tooltip: '歌词',
+                        size: 40,
+                        iconSize: 22,
                         color: fg,
                       ),
-                    ),
-                    RoundIconButton(
-                      icon: Icons.lyrics_outlined,
-                      onPressed: () => openNowPlaying(context, showLyrics: true),
-                      tooltip: '歌词',
-                      size: 40,
-                      iconSize: 22,
-                      color: fg,
-                    ),
-                    LikeButton(songId: song.id, color: fg),
-                    RoundIconButton(
-                      icon: player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      onPressed: player.toggle,
-                      tooltip: player.isPlaying ? '暂停' : '播放',
-                      size: 44,
-                      iconSize: 28,
-                      filled: true,
-                      background: cover.primary,
-                      color: cover.onPrimary,
-                    ),
-                  ],
+                      LikeButton(songId: song.id, color: fg),
+                      RoundIconButton(
+                        icon: player.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        onPressed: player.toggle,
+                        tooltip: player.isPlaying ? '暂停' : '播放',
+                        size: 44,
+                        iconSize: 28,
+                        filled: true,
+                        background: cover.primary,
+                        color: cover.onPrimary,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 0,
-                child: _ProgressLine(color: cover.primary),
-              ),
-            ],
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 0,
+                  child: _ProgressLine(color: cover.primary),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 在一起听房间里时，在播放条左上边缘叠一排成员头像。
+class _WithListeners extends StatelessWidget {
+  const _WithListeners({
+    required this.child,
+    required this.ring,
+    required this.background,
+    required this.foreground,
+  });
+
+  final Widget child;
+  final Color ring;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final listen = AppScope.of(context).listen;
+    return ListenableBuilder(
+      listenable: listen,
+      child: child,
+      builder: (context, child) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          child!,
+          if (listen.active && listen.users.isNotEmpty)
+            Positioned(
+              left: 10,
+              top: -10,
+              child: IgnorePointer(
+                child: Tooltip(
+                  message: '一起听',
+                  child: MemberAvatars(
+                    users: listen.users,
+                    size: 22,
+                    ring: ring,
+                    background: background,
+                    foreground: foreground,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -113,28 +167,32 @@ class FloatingBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nav = navigation;
-    final scheme = context.scheme;
-    // 有导航栏时渐变的终点用导航栏的底色，播放条和导航栏连成一体。
-    final end = nav == null ? scheme.surface : scheme.surfaceContainer;
-    final bar = DecoratedBox(
+    final end = context.scheme.surface;
+    // 二级页面没有导航栏：播放条离屏幕底边（手势条）再抬高一点。
+    final content = nav == null
+        ? const SafeArea(
+            top: false,
+            minimum: EdgeInsets.only(bottom: 12),
+            child: Padding(padding: EdgeInsets.only(bottom: 8), child: PlayerBar()),
+          )
+        : Column(mainAxisSize: MainAxisSize.min, children: [const PlayerBar(), nav]);
+    // 渐变铺在播放条和导航栏后面一整块，从透明过渡到页面底色。
+    // 两者之间不再有一截不透明的底色，看不出黑边。
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [end.withValues(alpha: 0), end.withValues(alpha: 0.85), end],
-          stops: const [0, 0.4, 1],
+          colors: [
+            end.withValues(alpha: 0),
+            end.withValues(alpha: 0.7),
+            end.withValues(alpha: 0.9),
+          ],
+          stops: const [0, 0.45, 1],
         ),
       ),
-      // 二级页面没有导航栏：播放条离屏幕底边（手势条）再抬高一点。
-      child: nav == null
-          ? const SafeArea(
-              top: false,
-              minimum: EdgeInsets.only(bottom: 12),
-              child: Padding(padding: EdgeInsets.only(bottom: 8), child: PlayerBar()),
-            )
-          : const PlayerBar(),
+      child: content,
     );
-    return Column(mainAxisSize: MainAxisSize.min, children: [bar, ?nav]);
   }
 }
 

@@ -38,6 +38,19 @@ class AccountController extends ChangeNotifier {
       if (!p.isLikedList && p.creatorId == _profile?.userId) p,
   ];
 
+  /// 共建歌单：自己建的和加入的别人的，都放在音乐库的「共享歌单」里。
+  List<Playlist> get sharedPlaylists => [
+    for (final p in _playlists)
+      if (!p.isLikedList && isShared(p)) p,
+  ];
+
+  /// 能往里加歌的歌单：自己创建的，加上加入的别人的共建歌单。
+  /// 共建成员加歌和自己加歌是同一个接口，有没有权限由服务端判断。
+  List<Playlist> get addablePlaylists => [
+    for (final p in _playlists)
+      if (!p.isLikedList && (p.creatorId == _profile?.userId || isShared(p))) p,
+  ];
+
   /// 是否收藏了别人的歌单 [id]。
   bool isSubscribed(String id) => _playlists.any((p) => p.id == id && p.subscribed);
 
@@ -61,9 +74,10 @@ class AccountController extends ChangeNotifier {
   }
 
   /// 新建歌单，成功后刷新歌单列表并返回新歌单（找不到时为 null）。
-  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+  Future<Playlist?> createPlaylist(String name, {bool private = false, bool shared = false}) async {
     if (!isLoggedIn) throw const ApiException('登录后才能新建歌单', code: 301);
-    final created = await _api.createPlaylist(name, private: private);
+    final created = await _api.createPlaylist(name, private: private, shared: shared);
+    if (shared && created != null) _settings.addSharedPlaylist(created.id);
     await _reloadPlaylists();
     return _find(created?.id) ?? created;
   }
@@ -128,8 +142,12 @@ class AccountController extends ChangeNotifier {
     await _reloadPlaylists().catchError((Object _) {});
   }
 
-  /// 能删歌的歌单：自己创建的和「我喜欢的音乐」。
-  bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id;
+  /// 是不是共建歌单：接口标了，或者是在本机建的共建歌单。
+  bool isShared(Playlist p) => p.shared || _settings.sharedPlaylistIds.contains(p.id);
+
+  /// 能删歌的歌单：自己创建的、「我喜欢的音乐」和共建歌单。
+  /// 共建歌单的协作者也能删歌（自己加的和别人加的都行，和官方 App 一致）。
+  bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id || isShared(p);
 
   /// 启动时用保存的 Cookie 恢复登录。网络失败时保留 Cookie，下次再试。
   Future<void> restore() async {

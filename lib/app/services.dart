@@ -6,12 +6,14 @@ import '../api/cookies.dart';
 import '../api/netease_api.dart';
 import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
+import '../audio/audio_output.dart';
 import '../audio/system_media.dart';
 import '../data/track_cache.dart';
 import '../lyrics/lyric_service.dart';
 import '../lyrics/qq_lyrics.dart';
 import '../state/account_controller.dart';
 import '../state/player_controller.dart';
+import '../state/listen_together.dart';
 import '../state/settings.dart';
 import '../widgets/image_disk_cache.dart';
 import 'update_checker.dart';
@@ -46,7 +48,10 @@ class AppServices {
       backend: NeteaseBackend(api, lyrics),
       settings: settings,
       cache: audioCache,
+      output: const AudioOutput(),
     );
+    // 播放器建好前先把输出设置（设备、位深、采样率、USB 独占）告诉原生端。
+    unawaited(player.applyOutput());
     final account = AccountController(api: api, settings: settings);
     // 注册系统媒体会话（Android 前台服务 + 通知、iOS 锁屏），保证后台持续播放。
     await SystemMediaBridge.register(player, account);
@@ -66,6 +71,9 @@ class AppServices {
   final AccountController account;
   final PlayerController player;
 
+  /// 一起听。
+  late final listen = ListenTogether(api: api, player: player, account: account);
+
   /// 听歌缓存。测试里为 null。
   final AudioCache? audioCache;
 
@@ -76,6 +84,7 @@ class AppServices {
   final UpdateChecker? updates;
 
   void dispose() {
+    listen.dispose();
     player.dispose();
     audioCache?.dispose();
     account.dispose();

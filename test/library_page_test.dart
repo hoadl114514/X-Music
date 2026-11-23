@@ -52,6 +52,24 @@ void main() {
               'trackCount': 7,
               'creator': {'userId': 1, 'nickname': '我'},
             },
+            {
+              'id': 43,
+              'name': '一起建的歌',
+              'trackCount': 12,
+              // 真实返回：共享歌单 specialType 300，列表里的成员只有 userId。
+              'specialType': 300,
+              'creator': {'userId': 1, 'nickname': '我'},
+              'sharedUsers': [
+                {'userId': 5},
+              ],
+            },
+            {
+              'id': 44,
+              'name': '朋友的共享',
+              'trackCount': 5,
+              'specialType': 300,
+              'creator': {'userId': 3, 'nickname': '朋友'},
+            },
             if (!unsubscribed)
               {
                 'id': 99,
@@ -60,6 +78,61 @@ void main() {
                 'subscribed': true,
                 'creator': {'userId': 2, 'nickname': '别人'},
               },
+          ],
+        });
+      }
+      if (path == '/api/v6/playlist/detail' && r.bodyFields['id'] == '44') {
+        return _json({
+          'code': 200,
+          'playlist': {
+            'id': 44,
+            'name': '朋友的共享',
+            'specialType': 300,
+            'trackIds': [
+              {'id': 500, 'uid': 3},
+            ],
+            'creator': {'userId': 3, 'nickname': '朋友'},
+            'sharedUsers': [
+              {'userId': 1, 'nickname': '我'},
+            ],
+          },
+        });
+      }
+      if (path == '/api/v6/playlist/detail' && r.bodyFields['id'] == '43') {
+        // 歌单详情里的成员带昵称和头像。
+        return _json({
+          'code': 200,
+          'playlist': {
+            'id': 43,
+            'name': '一起建的歌',
+            'specialType': 300,
+            'trackIds': [
+              {'id': 500, 'uid': 5},
+            ],
+            'creator': {'userId': 1, 'nickname': '我'},
+            'sharedUsers': [
+              {'userId': 5, 'nickname': '好友'},
+            ],
+          },
+          'sharedPrivilege': {'status': 'SHARED', 'usePermission': 'NORMAL'},
+        });
+      }
+      if (path == '/eapi/playlist/shared/contributor/delete') {
+        return _json({'code': 200, 'data': true, 'message': ''});
+      }
+      if (path == '/api/v3/song/detail') {
+        return _json({
+          'code': 200,
+          'songs': [
+            {
+              'id': 500,
+              'name': '好友加的歌',
+              'ar': [
+                {'id': 1, 'name': '某歌手'},
+              ],
+              'al': {'id': 2, 'name': '某专辑'},
+              'dt': 180000,
+            },
           ],
         });
       }
@@ -88,13 +161,32 @@ void main() {
     expect(paths.where((p) => p == '/api/user/playlist').length, 2);
     expect(find.text('我喜欢的音乐'), findsOneWidget);
     expect(find.text('321 首'), findsOneWidget);
+    // 最近播放、听歌排行从原来的侧栏搬到了音乐库。
+    expect(find.text('最近播放'), findsOneWidget);
+    expect(find.text('听歌排行'), findsOneWidget);
+    expect(find.text('艺人'), findsOneWidget);
+    // 「新建」可以选普通歌单或共建歌单。
+    await tester.tap(find.text('新建').first);
+    await tester.pumpAndSettle();
+    expect(find.text('共建歌单'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
     expect(find.text('创建的歌单'), findsOneWidget);
     expect(find.text('7 首'), findsOneWidget);
     expect(find.text('自建歌单'), findsOneWidget);
     expect(find.text('收藏的歌单'), findsOneWidget);
     expect(find.text('别人的歌单'), findsOneWidget);
+    // 共建歌单单独一栏：自己建的和加入的别人的都在这里。
+    expect(find.text('共享歌单'), findsOneWidget);
+    expect(find.text('一起建的歌'), findsOneWidget);
+    expect(find.text('朋友的共享'), findsOneWidget);
+    expect(find.text('5 首 · 朋友'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('朋友的共享')).dy,
+      lessThan(tester.getTopLeft(find.text('收藏的歌单')).dy),
+    );
     // 「我喜欢」只在顶部卡片里，不重复出现在创建的歌单里。
-    expect(find.text('2'), findsNothing);
+    expect(find.text('3'), findsNothing);
 
     // 自建歌单的管理菜单。
     await tester.tap(find.byTooltip('管理歌单').first);
@@ -115,5 +207,51 @@ void main() {
     expect(paths.any((p) => p.endsWith('/playlist/unsubscribe')), isTrue);
     expect(find.text('别人的歌单'), findsNothing);
     expect(find.text('还没有收藏歌单'), findsOneWidget);
+  });
+
+  testWidgets('a shared playlist shows invite friends under its name; a normal one does not', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.tap(find.text('一起建的歌'));
+    await tester.pumpAndSettle();
+    expect(find.text('管理'), findsOneWidget);
+    // 成员昵称从歌单详情补全，头像位置显示昵称首字。
+    expect(find.text('好'), findsNWidgets(2)); // 邀请行和添加人各一个。
+    expect(find.text('?'), findsNothing);
+    // 每首歌下面显示谁添加的。
+    expect(find.text('好友加的歌'), findsOneWidget);
+    expect(find.text('好友 添加'), findsOneWidget);
+    // 「管理」打开成员面板：创建者在最前，底部邀请好友。
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('共享歌单成员 · 2 人'), findsOneWidget);
+    expect(find.text('我（我）'), findsOneWidget);
+    expect(find.text('创建者'), findsOneWidget);
+    expect(find.text('好友'), findsOneWidget);
+    expect(find.text('邀请好友'), findsOneWidget);
+    // 自己建的歌单：不显示「退出」；别的成员可以移出，创建者（自己）不行。
+    expect(find.text('退出共享歌单'), findsNothing);
+    expect(find.text('移出'), findsOneWidget);
+    await tester.tap(find.text('移出'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移出').last);
+    await tester.pumpAndSettle();
+    expect(paths, contains('/eapi/playlist/shared/contributor/delete'));
+    expect(find.text('共享歌单成员 · 2 人'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('自建歌单'));
+    await tester.pumpAndSettle();
+    expect(find.text('管理'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // 加入的别人的共建歌单：协作者也能删歌。
+    await tester.tap(find.text('朋友的共享'));
+    await tester.pumpAndSettle();
+    expect(find.text('管理'), findsOneWidget);
+    expect(find.text('批量删除'), findsOneWidget);
   });
 }

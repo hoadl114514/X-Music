@@ -7,11 +7,9 @@ import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/share.dart';
-import '../comments/comments_page.dart';
 import '../login_page.dart';
 import '../music/nav.dart';
 import '../now_playing/song_menu.dart';
-import '../social/compose_event_page.dart';
 
 /// 歌曲列表每行右侧「⋮」的菜单：下一首播放、喜欢、收藏到歌单、评论、分享、歌手、专辑。
 /// [onRemove] 不为 null 时多一项「从歌单中删除」。
@@ -120,17 +118,7 @@ class _SongActions extends StatelessWidget {
                   () => then((_) => remove()),
                   color: context.colors.negative,
                 ),
-              item(
-                Icons.mode_comment_outlined,
-                '评论',
-                () => then((c) => CommentsPage.openSong(c, song)),
-              ),
               item(Icons.share_outlined, '分享链接', () => then((_) => shareSong(song))),
-              item(
-                Icons.campaign_outlined,
-                '分享到动态',
-                () => then((c) => ComposeEventPage.open(c, song: song)),
-              ),
               if (song.artists.isNotEmpty)
                 item(
                   song.artists.length > 1

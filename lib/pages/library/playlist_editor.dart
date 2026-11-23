@@ -10,7 +10,6 @@ import '../../widgets/cover_art.dart';
 import '../../widgets/image_pick.dart';
 import '../../widgets/playlist_card.dart';
 import '../login_page.dart';
-import '../social/compose_event_page.dart';
 import 'playlist_page.dart';
 
 /// 歌单名最长 40 个字，简介最长 1000 个字（和官方客户端一致）。
@@ -18,21 +17,25 @@ const _maxName = 40;
 const _maxDescription = 1000;
 
 /// 新建歌单：输入名称、选是否隐私。成功后进入新歌单。
-Future<void> showCreatePlaylistDialog(BuildContext context) async {
+///
+/// [shared] 为 true 时建共建歌单：好友打开分享链接就能一起往里加歌。共建歌单不能设为隐私。
+Future<void> showCreatePlaylistDialog(BuildContext context, {bool shared = false}) async {
   final account = AccountScope.read(context);
   if (!account.isLoggedIn) return LoginPage.open(context);
   final created = await showDialog<Playlist>(
     context: context,
-    builder: (_) => const _CreateDialog(),
+    builder: (_) => _CreateDialog(shared: shared),
   );
   if (created == null || !context.mounted) return;
-  AppScope.toast('已新建歌单「${created.name}」');
+  AppScope.toast(shared ? '已新建共建歌单「${created.name}」，分享给好友一起加歌' : '已新建歌单「${created.name}」');
   await Navigator.of(context)
       .push(MaterialPageRoute<void>(builder: (_) => PlaylistPage(playlist: created)));
 }
 
 class _CreateDialog extends StatefulWidget {
-  const _CreateDialog();
+  const _CreateDialog({required this.shared});
+
+  final bool shared;
 
   @override
   State<_CreateDialog> createState() => _CreateDialogState();
@@ -54,7 +57,8 @@ class _CreateDialogState extends State<_CreateDialog> {
     if (name.isEmpty || _busy) return;
     setState(() => _busy = true);
     try {
-      final p = await AccountScope.read(context).createPlaylist(name, private: _private);
+      final p = await AccountScope.read(context)
+          .createPlaylist(name, private: !widget.shared && _private, shared: widget.shared);
       if (!mounted) return;
       if (p == null) {
         // 接口没返回新歌单：列表已刷新，回到原页面即可。
@@ -73,7 +77,7 @@ class _CreateDialogState extends State<_CreateDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: context.colors.surfaceHigh,
-      title: const Text('新建歌单'),
+      title: Text(widget.shared ? '新建共建歌单' : '新建歌单'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -85,14 +89,17 @@ class _CreateDialogState extends State<_CreateDialog> {
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _submit(),
           ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: _private,
-            onChanged: _busy ? null : (v) => setState(() => _private = v ?? false),
-            title: const Text('设为隐私歌单'),
-            subtitle: Text('只有自己能看到', style: TextStyle(color: context.colors.textMuted)),
-          ),
+          if (widget.shared)
+            Text('建好后把歌单分享给好友，好友打开就能一起往里加歌。', style: TextStyle(color: context.colors.textMuted))
+          else
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _private,
+              onChanged: _busy ? null : (v) => setState(() => _private = v ?? false),
+              title: const Text('设为隐私歌单'),
+              subtitle: Text('只有自己能看到', style: TextStyle(color: context.colors.textMuted)),
+            ),
         ],
       ),
       actions: [
@@ -141,11 +148,6 @@ Future<void> showPlaylistManageSheet(
               title: const Text('编辑歌单信息'),
               subtitle: const Text('名称、简介、封面'),
               onTap: () => then((c) => PlaylistEditPage.open(c, playlist)),
-            ),
-            ListTile(
-              leading: Icon(Icons.campaign_outlined, color: context.colors.textPrimary),
-              title: const Text('分享到动态'),
-              onTap: () => then((c) => ComposeEventPage.open(c, playlist: playlist)),
             ),
             ListTile(
               leading: Icon(Icons.delete_outline_rounded, color: context.colors.negative),

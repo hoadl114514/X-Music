@@ -28,6 +28,15 @@ class FakeEngine implements AudioEngine {
   /// 接下来这么多次 load 直接失败（模拟 Source error）。
   int failLoads = 0;
 
+  /// [rebuild] 调用次数。
+  int rebuilds = 0;
+
+  @override
+  Future<void> rebuild() async {
+    rebuilds++;
+    playing = false;
+  }
+
   void advance(Duration d) => _position += d;
   void complete() => _completed.add(null);
 

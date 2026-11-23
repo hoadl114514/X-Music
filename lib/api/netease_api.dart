@@ -312,6 +312,43 @@ class NeteaseApi {
     );
   }
 
+  /// 把 [userId] 移出共建歌单。官方 App 抓到的接口（安卓走 XEAPI，参数是 playlistId + userId），
+  /// 创建者和协作者都能移除别人。服务端返回 data 为 false 表示没移成（例如对方不是成员）。
+  Future<void> removeSharedContributor(String playlistId, int userId) async {
+    final data = await _eapi('/api/playlist/shared/contributor/delete', {
+      'playlistId': playlistId,
+      'userId': '$userId',
+    });
+    if (data['data'] != true) throw const ApiException('移出失败，对方可能已经不是成员');
+  }
+
+  /// 共建歌单的成员和每首歌的添加人（歌单详情 trackIds 里的 uid）。
+  Future<SharedPlaylistInfo> sharedPlaylistInfo(String id) async {
+    final data = await _api('https://music.163.com/api/v6/playlist/detail', {'id': id, 'n': '0'});
+    return parseSharedPlaylistInfo(data);
+  }
+
+  /// 解析共建歌单的成员和添加人。单独拿出来方便测试。
+  static SharedPlaylistInfo parseSharedPlaylistInfo(Map<String, Object?> data) {
+    final raw = data['playlist'];
+    if (raw is! Map) throw const ApiException('歌单不存在或无权查看');
+    final creator = parseSocialUser(raw['creator']);
+    final members = <SocialUser>[
+      ?creator,
+      for (final u in _list(raw['sharedUsers']))
+        if (parseSocialUser(u) case final m? when m.userId != creator?.userId) m,
+    ];
+    final byId = {for (final m in members) m.userId: m};
+    return SharedPlaylistInfo(
+      creator: creator,
+      members: members,
+      adders: {
+        for (final t in _list(raw['trackIds']))
+          if (t is Map && t['id'] != null) '${t['id']}': ?byId[_int(t['uid'])],
+      },
+    );
+  }
+
   /// 歌单第一首歌的封面：歌单本身没有封面或封面加载失败时用它代替。只取一首，不拉全部歌曲。
   Future<String?> playlistFirstCover(String id) async {
     final data = await _api('https://music.163.com/api/v6/playlist/detail', {'id': id, 'n': '1'});
@@ -377,11 +414,12 @@ class NeteaseApi {
   // playlist_cover_update，都需要登录。
 
   /// 新建歌单，返回新歌单（接口没给时为 null）。[private] 为 true 时是隐私歌单。
-  Future<Playlist?> createPlaylist(String name, {bool private = false}) async {
+  /// [shared] 为 true 时是共建歌单（官方叫共享歌单，type 为 SHARED），可以邀请好友一起加歌。
+  Future<Playlist?> createPlaylist(String name, {bool private = false, bool shared = false}) async {
     final data = await _weapi('/api/playlist/create', {
       'name': name,
       'privacy': private ? '10' : '0',
-      'type': 'NORMAL',
+      'type': shared ? 'SHARED' : 'NORMAL',
     });
     return _parsePlaylist(data['playlist']);
   }
@@ -455,9 +493,15 @@ class NeteaseApi {
     ];
   }
 
-  /// 私人 FM 的下一批（一次约 3 首，需要登录）。
-  Future<List<Song>> personalFm() async {
-    final data = await _api('https://music.163.com/api/v1/radio/get', const {});
+  /// 私人 FM 的下一批（一次约 3 首，需要登录）。[mode] 不是默认模式时按模式推荐。
+  Future<List<Song>> personalFm({FmMode mode = FmMode.normal}) async {
+    final data = mode == FmMode.normal
+        ? await _api('https://music.163.com/api/v1/radio/get', const {})
+        : await _weapi('/api/v1/radio/get', {
+            'mode': mode.mode,
+            'subMode': ?mode.subMode,
+            'limit': 3,
+          });
     return [for (final s in _list(data['data'])) ?parseSong(s)];
   }
 
@@ -582,6 +626,209 @@ class NeteaseApi {
   Future<List<Playlist>> toplists() async {
     final data = await _api('https://music.163.com/api/toplist', const {});
     return [for (final p in _list(data['list'])) ?_parsePlaylist(p)];
+  }
+
+  /// 歌单广场：分类 [cat]（「全部」或分类名）下的热门歌单，按 [offset] 翻页。
+  /// 参考 api-enhanced 的 top_playlist。
+  Future<({List<Playlist> items, bool more})> playlistSquare({
+    String cat = '全部',
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final data = await _weapi('/api/playlist/list', {
+      'cat': cat,
+      'order': 'hot',
+      'limit': limit,
+      'offset': offset,
+      'total': true,
+    });
+    final items = [for (final p in _list(data['playlists'])) ?_parsePlaylist(p)];
+    return (items: items, more: data['more'] == true);
+  }
+
+  /// 精品歌单。翻页用上一页最后一个歌单的 `updateTime`（[before]），第一页传 0。
+  /// 参考 api-enhanced 的 top_playlist_highquality。
+  Future<({List<Playlist> items, bool more, int lastTime})> highQualityPlaylists({
+    String cat = '全部',
+    int limit = 30,
+    int before = 0,
+  }) async {
+    final data = await _weapi('/api/playlist/highquality/list', {
+      'cat': cat,
+      'limit': limit,
+      'lasttime': before,
+      'total': true,
+    });
+    final items = [for (final p in _list(data['playlists'])) ?_parsePlaylist(p)];
+    return (items: items, more: data['more'] == true, lastTime: _int(data['lasttime']));
+  }
+
+  /// 歌单分类：热门标签。参考 api-enhanced 的 playlist_hot。
+  Future<List<String>> playlistHotTags() async {
+    final data = await _weapi('/api/playlist/hottags', const {});
+    return [
+      for (final t in _list(data['tags']))
+        if (t is Map) ?_str(t['name']),
+    ];
+  }
+
+  /// 歌单分类：全部分类，按大类（语种、风格……）分组。参考 api-enhanced 的 playlist_catlist。
+  Future<List<({String group, List<String> names})>> playlistCategories() async {
+    final data = await _weapi('/api/playlist/catalogue', const {});
+    final groups = data['categories'];
+    final byGroup = <String, List<String>>{};
+    for (final c in _list(data['sub'])) {
+      if (c is! Map) continue;
+      final name = _str(c['name']);
+      if (name == null) continue;
+      byGroup.putIfAbsent('${c['category']}', () => []).add(name);
+    }
+    return [
+      for (final MapEntry(:key, :value) in byGroup.entries)
+        (group: groups is Map ? '${groups[key] ?? key}' : key, names: value),
+    ];
+  }
+
+  /// 歌曲百科（官方播放页「百科」）。参考 api-enhanced 的 song_wiki_summary。
+  ///
+  /// 百科接口里的相似歌曲只有三首左右，再用相似歌曲接口补几首（失败不影响百科）。
+  Future<SongWiki> songWiki(String id) async {
+    final more = similarSongs(id).catchError((Object _) => const <Song>[]);
+    final wiki = parseSongWiki(await _eapi('/api/song/play/about/block/page', {'songId': id}));
+    return wiki.withMoreSimilar([
+      for (final s in await more)
+        if (s.id != id) SongBrief(id: s.id, title: s.title, artist: s.artist, coverUrl: s.coverUrl),
+    ]);
+  }
+
+  /// 相似歌曲（最多 5 首左右）。参考 api-enhanced 的 simi_song。
+  Future<List<Song>> similarSongs(String id) async {
+    final data = await _weapi('/api/v1/discovery/simiSong', {
+      'songid': id,
+      'limit': 50,
+      'offset': 0,
+    });
+    return [for (final s in _list(data['songs'])) ?parseSong(s)];
+  }
+
+  /// 播放页百科里「关于艺人」卡片的资料：大图、简介、粉丝数、是否已关注、最新专辑。
+  ///
+  /// 粉丝数和最新专辑取不到时留空，只有歌手资料是必需的。
+  Future<ArtistProfile> artistProfile(String id) async {
+    final fans = _eapi('/api/artist/follow/count/get', {
+      'id': id,
+    }).then<Map<String, Object?>?>((d) => d, onError: (Object _) => null);
+    final latest = artistAlbums(
+      id,
+      limit: 1,
+    ).then<Album?>((r) => r.albums.firstOrNull, onError: (Object _) => null);
+    final head = await _eapi('/api/artist/head/info/get', {'id': id});
+    return parseArtistProfile(head, await fans, await latest);
+  }
+
+  /// 解析「关于艺人」的几个接口。单独拿出来方便测试。
+  static ArtistProfile parseArtistProfile(
+    Map<String, Object?> head,
+    Map<String, Object?>? fans,
+    Album? latestAlbum,
+  ) {
+    final d = head['data'];
+    final a = d is Map ? d['artist'] : null;
+    if (a is! Map || a['id'] == null) throw const ApiException('歌手不存在');
+    final f = fans?['data'];
+    return ArtistProfile(
+      artist: Artist(
+        id: '${a['id']}',
+        name: '${a['name'] ?? ''}',
+        avatarUrl: _https(_str(a['avatar'])),
+        description: _str(a['briefDesc'])?.trim(),
+        songCount: _int(a['musicSize']),
+        albumCount: _int(a['albumSize']),
+      ),
+      coverUrl: _https(_str(a['cover'])),
+      fans: f is Map ? _int(f['fansCnt']) : null,
+      followed: f is Map && (f['isFollow'] == true || f['follow'] == true),
+      latestAlbum: latestAlbum,
+    );
+  }
+
+  /// 不展示的百科条目：评论（纯听歌版没有评论）、乐谱（没有乐谱页）。
+  static const _skippedWikiItems = {'songComment', 'sheet'};
+
+  /// 解析百科接口的返回。单独拿出来方便测试。
+  static SongWiki parseSongWiki(Map<String, Object?> data) {
+    final d = data['data'];
+    final blocks = _list(d is Map ? d['blocks'] : null);
+    Map<Object?, Object?>? block(String code) =>
+        blocks.firstWhere((b) => b is Map && b['code'] == code, orElse: () => null)
+            as Map<Object?, Object?>?;
+    String? title(Object? ui, [String key = 'mainTitle']) {
+      if (ui is! Map) return null;
+      final t = ui[key];
+      return t is Map ? _str(t['title']) : null;
+    }
+
+    String? image(Object? ui) {
+      if (ui is! Map) return null;
+      final first = _list(ui['images']).firstOrNull;
+      return first is Map ? _https(_str(first['imageUrl'])) : null;
+    }
+
+    final facts = <({String label, List<String> values})>[];
+    for (final c in _list(block('SONG_PLAY_ABOUT_SONG_BASIC')?['creatives'])) {
+      if (c is! Map || _skippedWikiItems.contains(c['creativeType'])) continue;
+      final label = title(c['uiElement']);
+      if (label == null) continue;
+      final ui = c['uiElement'];
+      final values = <String>[
+        for (final r in _list(c['resources']))
+          if (r is Map) ?title(r['uiElement']),
+        if (ui is Map)
+          for (final l in _list(ui['textLinks']))
+            if (l is Map) ?_str(l['text']),
+      ];
+      if (values.isNotEmpty) facts.add((label: label, values: values));
+    }
+
+    final similar = <SongBrief>[
+      for (final c in _list(block('SONG_PLAY_ABOUT_SIMILAR_SONG')?['creatives']))
+        if (c is Map)
+          for (final r in _list(c['resources']))
+            if (r is Map && r['resourceType'] == 'SONG' && _str('${r['resourceId'] ?? ''}') != null)
+              if (title(r['uiElement']) case final name?)
+                SongBrief(
+                  id: '${r['resourceId']}',
+                  title: name,
+                  artist: switch (r['uiElement']) {
+                    final Map<Object?, Object?> ui =>
+                      _list(ui['subTitles'])
+                          .whereType<Map<Object?, Object?>>()
+                          .map((t) => _str(t['title']))
+                          .nonNulls
+                          .join(' / '),
+                    _ => '',
+                  },
+                  coverUrl: image(r['uiElement']),
+                ),
+    ];
+
+    final playlists = <Playlist>[
+      for (final c in _list(block('SONG_PLAY_ABOUT_RELATED_PLAYLIST')?['creatives']))
+        if (c is Map)
+          for (final r in _list(c['resources']))
+            if (r is Map && r['resourceType'] == 'PLAYLIST' && r['resourceId'] != null)
+              if (title(r['uiElement']) case final name?)
+                Playlist(
+                  id: '${r['resourceId']}',
+                  name: name,
+                  playCount: switch (r['resourceExt']) {
+                    final Map<Object?, Object?> ext => _int(ext['playCount']),
+                    _ => 0,
+                  },
+                  coverUrl: image(r['uiElement']),
+                ),
+    ];
+    return SongWiki(facts: facts, similar: similar, playlists: playlists);
   }
 
   /// 热搜词。
@@ -1038,6 +1285,22 @@ class NeteaseApi {
     {'artistId': artistId, 'artistIds': '[$artistId]'},
   );
 
+  /// 已关注（收藏）的歌手，按 [offset] 翻页。参考 api-enhanced 的 artist_sublist。
+  Future<({List<Artist> items, bool more})> followedArtists({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final data = await _weapi('/api/artist/sublist', {
+      'limit': limit,
+      'offset': offset,
+      'total': true,
+    });
+    return (
+      items: [for (final a in _list(data['data'])) ?_parseArtist(a)],
+      more: data['hasMore'] == true,
+    );
+  }
+
   /// 歌手的全部歌曲：[byTime] 为 true 按发行时间从新到旧，否则按热度。
   /// 接口单页最多 100 首（再大会返回别人的歌），先取第一页拿到总数，剩下的几页并发取。
   Future<List<Song>> artistAllSongs(String id, {bool byTime = true, int maxSongs = 3000}) async {
@@ -1361,6 +1624,14 @@ class NeteaseApi {
       description: _str(raw['updateFrequency']) ?? _str('${raw['description'] ?? ''}'.trim()),
       subscribed: raw['subscribed'] == true,
       isLikedList: _int(raw['specialType']) == 5,
+      // 共建歌单：真实账号抓到的是 specialType 300（还没人加入时 sharedUsers 也是 null）。
+      // 其他几个字段名是推测的，也一并认。
+      shared:
+          _int(raw['specialType']) == 300 ||
+          raw['sharedUsers'] is List ||
+          raw['playlistType'] == 'SHARED' ||
+          raw['type'] == 'SHARED',
+      sharedUsers: [for (final u in _list(raw['sharedUsers'])) ?parseSocialUser(u)],
     );
   }
 
@@ -1453,7 +1724,141 @@ class NeteaseApi {
     'Cookie': encodeCookie(_cookieFor(profile, anonymous: anonymous)),
   };
 
-  /// 秒级时间戳，EAPI / XEAPI 的 `buildver`。
+  // ---- 一起听 ----
+  //
+  // 接口参考 api-enhanced 的 listentogether_*（以及 NeteaseCloudMusicApi issue #1676 的分析），都需要登录。
+  // 官方客户端靠长连接实时同步；公开接口只有「主机上报」这一侧，加入方只能轮询房间状态和播放列表。
+
+  /// 创建一起听房间，返回房间号。
+  Future<String> listenTogetherCreate() async {
+    final data = await _eapi('/api/listen/together/room/create', {'refer': 'songplay_more'});
+    final room = _obj(_obj(data['data'])['roomInfo']);
+    final id = '${room['roomId'] ?? ''}';
+    if (id.isEmpty) throw const ApiException('没有拿到房间号');
+    return id;
+  }
+
+  /// 房间能不能加入（status 为 AVAILABLE、joinable 为 true）。
+  Future<bool> listenTogetherCheck(String roomId) async {
+    final data = await _eapi('/api/listen/together/room/check', {'roomId': roomId});
+    final d = _obj(data['data']);
+    return d['joinable'] != false && (d['status'] == null || d['status'] == 'AVAILABLE');
+  }
+
+  /// 接受邀请，加入别人的房间。
+  Future<void> listenTogetherAccept(String roomId, String inviterId) => _eapi(
+    '/api/listen/together/play/invitation/accept',
+    {'refer': 'inbox_invite', 'roomId': roomId, 'inviterId': inviterId},
+  );
+
+  /// 当前账号的一起听状态：是否在房间里、房间号、房间里的人。
+  Future<ListenTogetherStatus> listenTogetherStatus() async {
+    final data = await _weapi('/api/listen/together/status/get', const {});
+    final d = _obj(data['data']);
+    final room = _obj(d['roomInfo']);
+    return ListenTogetherStatus(
+      inRoom: d['inRoom'] == true,
+      roomId: _str('${room['roomId'] ?? ''}'),
+      creatorId: _int(room['creatorId']),
+      users: [
+        for (final u in _list(room['roomUsers']))
+          if (u is Map)
+            SocialUser(
+              userId: _int(u['userId']),
+              nickname: _str(u['nickname']) ?? '',
+              avatarUrl: _https(_str(u['avatarUrl'])),
+            ),
+      ],
+    );
+  }
+
+  /// 房间的快照：播放列表（歌曲 id，按显示顺序）和最后一条播放指令。
+  ///
+  /// 加入方靠定时拉这个接口跟上房主：指令里有当前歌曲、播放状态、发指令时的进度，
+  /// 以及服务器收到指令的时间（`serverSeq`，毫秒时间戳），据此推算现在的进度。
+  /// 字段参考开源项目 Enji（together.rs）和 MeloX-Android 的实现。
+  Future<ListenTogetherSnapshot> listenTogetherSnapshot(String roomId) async {
+    final data = await _eapi('/api/listen/together/sync/playlist/get', {'roomId': roomId});
+    final d = _obj(data['data']);
+    final list = _obj(_obj(d['playlist'])['displayList']);
+    final c = _obj(d['playCommand']);
+    final song = '${c['targetSongId'] ?? c['songId'] ?? ''}';
+    final status = '${c['playStatus'] ?? ''}'.toUpperCase();
+    return ListenTogetherSnapshot(
+      songIds: [for (final id in _list(list['result'])) '$id'],
+      command: song.isEmpty || song == '0' || (status != 'PLAY' && status != 'PAUSE')
+          ? null
+          : ListenTogetherCommand(
+              songId: song,
+              playing: status == 'PLAY',
+              progress: Duration(milliseconds: _int(c['progress']).clamp(0, 1 << 31)),
+              serverTime: _int(c['serverSeq']),
+              clientSeq: _int(c['clientSeq']),
+              userId: _int(c['userId']),
+            ),
+    );
+  }
+
+  /// 主机上报整个播放列表（REPLACE）。[version] 每次加一。
+  Future<void> listenTogetherSyncList(
+    String roomId, {
+    required int userId,
+    required int version,
+    required List<String> songIds,
+    String playMode = 'ORDER_LOOP',
+  }) => _eapi('/api/listen/together/sync/list/command/report', {
+    'roomId': roomId,
+    'playlistParam': jsonEncode({
+      'commandType': 'REPLACE',
+      'version': [
+        {'userId': userId, 'version': version},
+      ],
+      'anchorSongId': '',
+      'anchorPosition': -1,
+      'randomList': songIds,
+      'displayList': songIds,
+      'playMode': playMode,
+    }),
+  });
+
+  /// 主机上报播放指令：[command] 为 PLAY / PAUSE / GOTO / SEEK。
+  Future<void> listenTogetherCommand(
+    String roomId, {
+    required String command,
+    required String songId,
+    required bool playing,
+    required Duration progress,
+    required int clientSeq,
+    String formerSongId = '-1',
+  }) => _eapi('/api/listen/together/play/command/report', {
+    'roomId': roomId,
+    'commandInfo': jsonEncode({
+      'commandType': command,
+      'progress': progress.inMilliseconds,
+      'playStatus': playing ? 'PLAY' : 'PAUSE',
+      'formerSongId': formerSongId,
+      'targetSongId': songId,
+      'clientSeq': clientSeq,
+    }),
+  });
+
+  /// 心跳：每首歌开始时和之后定时上报当前歌曲与进度。
+  Future<void> listenTogetherHeartbeat(
+    String roomId, {
+    required String songId,
+    required bool playing,
+    required Duration progress,
+  }) => _eapi('/api/listen/together/heartbeat', {
+    'roomId': roomId,
+    'songId': songId,
+    'playStatus': playing ? 'PLAY' : 'PAUSE',
+    'progress': progress.inMilliseconds,
+  });
+
+  /// 结束房间（主机）或退出。
+  Future<void> listenTogetherEnd(String roomId) =>
+      _eapi('/api/listen/together/end/v2', {'roomId': roomId});
+
   static String _buildver() => '${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
 
   /// 以 PC 客户端身份发一个明文 `/api/` 请求。
@@ -1676,6 +2081,7 @@ class NeteaseApi {
   }
 
   static List<Object?> _list(Object? v) => v is List ? v : const [];
+  static Map<Object?, Object?> _obj(Object? v) => v is Map ? v : const {};
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
   static String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
 

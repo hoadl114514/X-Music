@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../../app/app.dart';
 import '../../data/models.dart';
-import '../comments/comments_page.dart';
 import '../music/nav.dart';
 import '../../state/player_controller.dart';
 import '../../theme/app_theme.dart';
+import '../listen_together_page.dart';
 import '../../widgets/copy_sheet.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/flow_background.dart';
@@ -16,6 +17,7 @@ import '../../widgets/share.dart';
 import 'lyrics_view.dart';
 import 'player_controls.dart';
 import 'song_menu.dart';
+import 'song_wiki_view.dart';
 
 /// 从底部滑出的页面路由。
 Route<void> slideUpRoute(Widget page) => PageRouteBuilder<void>(
@@ -48,8 +50,8 @@ Future<void> openNowPlaying(BuildContext context, {bool showLyrics = false}) =>
 
 final _immersive = AppTheme.immersive();
 
-/// 全屏播放页：流光背景，中间左右滑动在「封面」和「歌词」两页间切换（歌词在右边），
-/// 下方控制区两页共用。下滑收起。
+/// 全屏播放页：流光背景，中间三页左右滑动：歌词 ← 封面 → 百科（默认停在封面，
+/// 右滑看歌词，左滑看百科），下方控制区三页共用。下滑收起。
 class NowPlayingPage extends StatefulWidget {
   const NowPlayingPage({super.key, this.initialLyrics = false});
 
@@ -62,7 +64,30 @@ class NowPlayingPage extends StatefulWidget {
 class _NowPlayingPageState extends State<NowPlayingPage> {
   static const _hPad = EdgeInsets.symmetric(horizontal: 24);
 
-  late final _pages = PageController(initialPage: widget.initialLyrics ? 1 : 0);
+  // 从左到右：百科、封面、歌词。右滑看百科，左滑看歌词。
+  static const _wikiPage = 0;
+  static const _coverPage = 1;
+  static const _lyricsPage = 2;
+
+  late final _pages = PageController(initialPage: widget.initialLyrics ? _lyricsPage : _coverPage);
+
+  /// 百科页往下翻时收起进度条和播放按钮，往回翻时再放出来。
+  bool _controlsHidden = false;
+
+  void _setControlsHidden(bool hidden) {
+    if (hidden != _controlsHidden) setState(() => _controlsHidden = hidden);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 离开百科页就恢复播放控制。
+    _pages.addListener(() {
+      if (_controlsHidden && (_pages.page ?? 0).round() != _wikiPage) {
+        _setControlsHidden(false);
+      }
+    });
+  }
 
   void _goTo(int page) => _pages.animateToPage(
     page,
@@ -97,39 +122,69 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
             // 滑动时页面从屏幕边缘进出，不会在留白处被切出一道硬边。
             child: Column(
               children: [
-                const Padding(padding: _hPad, child: _TopBar()),
+                Padding(
+                  padding: _hPad,
+                  child: _TopBar(onWiki: () => _goTo(_wikiPage)),
+                ),
                 Expanded(
                   child: PageView(
                     controller: _pages,
                     children: [
                       Padding(
                         padding: _hPad,
-                        child: _CoverPane(song: song, onTapCover: () => _goTo(1)),
+                        child: _WikiPane(
+                          song: song,
+                          onTapHeader: () => _goTo(_coverPage),
+                          onScrollDown: _setControlsHidden,
+                        ),
                       ),
                       Padding(
                         padding: _hPad,
-                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(0)),
+                        child: _CoverPane(song: song, onTapCover: () => _goTo(_lyricsPage)),
+                      ),
+                      Padding(
+                        padding: _hPad,
+                        child: _LyricsPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-                _PageDots(controller: _pages, count: 2),
+                _PageDots(controller: _pages, count: 3),
                 const SizedBox(height: 8),
-                const Padding(
-                  padding: _hPad,
-                  child: Column(
-                    children: [
-                      SeekBar(),
-                      SizedBox(height: 4),
-                      _QualityPill(),
-                      SizedBox(height: 12),
-                      _Controls(),
-                    ],
+                ClipRect(
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    heightFactor: _controlsHidden ? 0 : 1,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _controlsHidden ? 0 : 1,
+                      child: IgnorePointer(
+                        ignoring: _controlsHidden,
+                        child: const Column(
+                          children: [
+                            Padding(
+                              padding: _hPad,
+                              child: Column(
+                                children: [
+                                  SeekBar(),
+                                  SizedBox(height: 4),
+                                  _QualityPill(),
+                                  SizedBox(height: 12),
+                                  _Controls(),
+                                ],
+                              ),
+                            ),
+                            // 在一起听房间里时显示一起听条；不在时留一段空白，单手拇指更好按。
+                            ListenTogetherBar(),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                // 控制区离底部留够距离，单手拇指更好按。
-                const SizedBox(height: 56),
               ],
             ),
           ),
@@ -179,7 +234,10 @@ class _PageDots extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar();
+  const _TopBar({required this.onWiki});
+
+  /// 「更多」里点「歌曲百科」：翻到百科页。
+  final VoidCallback onWiki;
 
   @override
   Widget build(BuildContext context) {
@@ -222,7 +280,7 @@ class _TopBar extends StatelessWidget {
             ),
             RoundIconButton(
               icon: Icons.more_horiz_rounded,
-              onPressed: () => showSongMenu(context),
+              onPressed: () => showSongMenu(context, onWiki: onWiki),
               tooltip: '更多',
               color: Colors.white70,
               iconSize: 24,
@@ -291,7 +349,7 @@ class _CoverPane extends StatelessWidget {
   }
 }
 
-/// 歌词页：顶部小封面和歌名，下面是歌词。点顶部或向右滑回到封面。
+/// 歌词页（封面左边一页）：顶部小封面和歌名，下面是歌词。点顶部或向左滑回到封面。
 class _LyricsPane extends StatelessWidget {
   const _LyricsPane({required this.song, required this.onTapHeader});
 
@@ -334,6 +392,69 @@ class _LyricsPane extends StatelessWidget {
             shaderCallback: _fadeEdges,
             blendMode: BlendMode.dstIn,
             child: LyricsView(fontSize: 28, anchor: 0.25, depth: true),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 百科页（封面右边一页）：顶部小封面和歌名，下面是歌曲百科。点顶部或向右滑回到封面。
+class _WikiPane extends StatelessWidget {
+  const _WikiPane({required this.song, required this.onTapHeader, required this.onScrollDown});
+
+  final Song song;
+  final VoidCallback onTapHeader;
+
+  /// 往下翻（看更多内容）时传 true，往回翻或回到顶部时传 false。
+  final ValueChanged<bool> onScrollDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: onTapHeader,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 52,
+                child: CoverArt(
+                  palette: song.palette,
+                  seed: song.id,
+                  imageUrl: song.coverUrl,
+                  radius: 6,
+                  shadow: AppShadows.medium,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: _TitleRow(song: song, large: false)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ShaderMask(
+            shaderCallback: _fadeEdges,
+            blendMode: BlendMode.dstIn,
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (n) {
+                // 只看竖向滚动；相关歌单那一排横向列表不算。
+                if (n.metrics.axis != Axis.vertical) return false;
+                // 方向一变就切换。方向通知在位置更新之前发出，刚开始往下翻时位置还是 0，
+                // 所以「回到顶部」只看位置更新，不看方向通知。
+                if (n is UserScrollNotification) {
+                  if (n.direction == ScrollDirection.reverse) onScrollDown(true);
+                  if (n.direction == ScrollDirection.forward) onScrollDown(false);
+                } else if (n is ScrollUpdateNotification &&
+                    n.metrics.pixels <= n.metrics.minScrollExtent) {
+                  onScrollDown(false);
+                }
+                return false;
+              },
+              child: SongWikiView(song: song),
+            ),
           ),
         ),
       ],
@@ -402,101 +523,15 @@ class _TitleRow extends StatelessWidget {
           iconSize: large ? 26 : 24,
           color: Colors.white,
         ),
-        _CommentButton(song: song, size: large ? 44 : 40, iconSize: large ? 24 : 22),
+        RoundIconButton(
+          icon: Icons.playlist_add_rounded,
+          tooltip: '收藏到歌单',
+          color: Colors.white,
+          size: large ? 44 : 40,
+          iconSize: large ? 24 : 22,
+          onPressed: () => showAddToPlaylistSheet(context, song),
+        ),
       ],
-    );
-  }
-}
-
-/// 评论按钮，右上角带评论数（超过 999 显示 999+）。
-class _CommentButton extends StatefulWidget {
-  const _CommentButton({required this.song, required this.size, required this.iconSize});
-
-  final Song song;
-  final double size;
-  final double iconSize;
-
-  @override
-  State<_CommentButton> createState() => _CommentButtonState();
-}
-
-class _CommentButtonState extends State<_CommentButton> {
-  /// 每首歌只取一次评论数，封面 / 歌词两页和反复打开播放页共用。
-  static final _counts = <String, int>{};
-  static final _pending = <String, Future<int>>{};
-
-  int? _count;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(_CommentButton old) {
-    super.didUpdateWidget(old);
-    if (old.song.id != widget.song.id) _load();
-  }
-
-  void _load() {
-    final id = widget.song.id;
-    _count = _counts[id];
-    if (_count != null) return;
-    final api = AppScope.of(context).api;
-    _pending
-        .putIfAbsent(
-          id,
-          () => api
-              .comments(CommentTarget.song.threadId(id), pageSize: 1)
-              .then((p) => _counts[id] = p.total)
-              // 注意不能写成 `=> _pending.remove(id)`：remove 返回的就是这个 future 本身，
-              // whenComplete 会等它完成，自己等自己，后面的 setState 永远不会执行。
-              .whenComplete(() {
-                _pending.remove(id);
-              }),
-        )
-        .then((n) {
-          if (mounted && widget.song.id == id) setState(() => _count = n);
-        })
-        .catchError((Object _) {}); // 取不到就不显示数字。
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final n = _count;
-    // 右边多留一点宽度给评论数，免得「999+」伸出屏幕边缘。
-    return SizedBox(
-      width: widget.size + 16,
-      height: widget.size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          RoundIconButton(
-            icon: Icons.mode_comment_outlined,
-            onPressed: () => CommentsPage.openSong(context, widget.song),
-            tooltip: '评论',
-            color: Colors.white,
-            size: widget.size,
-            iconSize: widget.iconSize,
-          ),
-          if (n != null && n > 0)
-            Positioned(
-              left: widget.size * 0.62,
-              top: widget.size * 0.08,
-              child: IgnorePointer(
-                child: Text(
-                  n > 999 ? '999+' : '$n',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

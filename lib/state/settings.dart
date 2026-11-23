@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/client_identity.dart';
 import '../audio/audio_cache.dart';
+import '../audio/audio_output.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 
@@ -18,6 +19,7 @@ class AppSettings extends ChangeNotifier {
   final SharedPreferences _prefs;
 
   static const _kCookie = 'cookie';
+  static const _kFmMode = 'fm_mode';
   static const _kQuality = 'preferred_quality';
   static const _kLyricSource = 'lyric_source';
   static const _kTranslation = 'show_translation';
@@ -31,6 +33,13 @@ class AppSettings extends ChangeNotifier {
   static const _kThemeMode = 'theme_mode';
   static const _kDynamicColor = 'dynamic_color';
   static const _kSeedColor = 'seed_color';
+  static const _kMobileQuality = 'mobile_quality';
+  static const _kOutputDeviceType = 'output_device_type';
+  static const _kOutputDeviceName = 'output_device_name';
+  static const _kOutputBitDepth = 'output_bit_depth';
+  static const _kOutputSampleRate = 'output_sample_rate';
+  static const _kUsbExclusive = 'usb_exclusive';
+  static const _kSharedPlaylists = 'shared_playlists';
 
   /// 搜索历史最多保留几条。
   static const searchHistoryLimit = 20;
@@ -51,6 +60,47 @@ class AppSettings extends ChangeNotifier {
   AudioQuality get preferredQuality =>
       AudioQuality.fromLevel(_prefs.getString(_kQuality)) ?? AudioQuality.exhigh;
   set preferredQuality(AudioQuality v) => _set(() => _prefs.setString(_kQuality, v.level));
+
+  /// 私人 FM 的模式。
+  FmMode get fmMode => FmMode.fromName(_prefs.getString(_kFmMode));
+  set fmMode(FmMode v) => _set(() => _prefs.setString(_kFmMode, v.name));
+
+  /// 移动网络下的音质；为 null 时和 [preferredQuality] 一样。
+  AudioQuality? get mobileQuality => AudioQuality.fromLevel(_prefs.getString(_kMobileQuality));
+  set mobileQuality(AudioQuality? v) => _set(
+    () => v == null ? _prefs.remove(_kMobileQuality) : _prefs.setString(_kMobileQuality, v.level),
+  );
+
+  /// 指定的输出设备；为 null 时交给系统选择。
+  AudioOutputDevice? get outputDevice {
+    final type = _prefs.getInt(_kOutputDeviceType) ?? 0;
+    if (type == 0) return null;
+    return AudioOutputDevice(type: type, name: _prefs.getString(_kOutputDeviceName) ?? '');
+  }
+
+  set outputDevice(AudioOutputDevice? v) => _set(() {
+    // 两个都先写进内存再等落盘，读的时候不会只看到一半。
+    final type = _prefs.setInt(_kOutputDeviceType, v?.type ?? 0);
+    final name = _prefs.setString(_kOutputDeviceName, v?.name ?? '');
+    return Future.wait([type, name]).then((r) => r.every((ok) => ok));
+  });
+
+  OutputBitDepth get outputBitDepth => OutputBitDepth.byName(_prefs.getString(_kOutputBitDepth));
+  set outputBitDepth(OutputBitDepth v) => _set(() => _prefs.setString(_kOutputBitDepth, v.name));
+
+  /// 输出采样率；0 表示跟随音源。
+  int get outputSampleRate => _prefs.getInt(_kOutputSampleRate) ?? 0;
+  set outputSampleRate(int v) => _set(() => _prefs.setInt(_kOutputSampleRate, v));
+
+  /// 在本机建的共建歌单 id。接口不一定标出共建歌单，自己建的先记下来。
+  Set<String> get sharedPlaylistIds => {...?_prefs.getStringList(_kSharedPlaylists)};
+
+  void addSharedPlaylist(String id) =>
+      _set(() => _prefs.setStringList(_kSharedPlaylists, [...sharedPlaylistIds, id]));
+
+  /// USB DAC 独占（bit-perfect）。
+  bool get usbExclusive => _prefs.getBool(_kUsbExclusive) ?? false;
+  set usbExclusive(bool v) => _set(() => _prefs.setBool(_kUsbExclusive, v));
 
   /// 默认歌词来源。取不到时自动换另一个来源。
   LyricSource get lyricSource =>

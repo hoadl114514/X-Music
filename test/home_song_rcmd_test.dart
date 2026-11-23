@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
+import 'package:netease_client/app/services.dart';
+import 'package:netease_client/data/models.dart';
 import 'package:netease_client/pages/home_page.dart';
 
 import 'support/fakes.dart';
@@ -96,7 +98,7 @@ void main() {
     }
   }
 
-  Future<void> pumpHome(WidgetTester tester, Size size) async {
+  Future<AppServices> pumpHome(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -117,7 +119,32 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    return f.services;
   }
+
+  testWidgets('the playing recommendation shows pause and toggles playback', (tester) async {
+    final services = await pumpHome(tester, const Size(400, 1400));
+    final row = find.ancestor(of: find.text('推荐1'), matching: find.byType(InkWell)).first;
+    Finder button(String tip) => find.descendant(of: row, matching: find.byTooltip(tip));
+    expect(button('播放'), findsOneWidget);
+
+    await tester.tap(button('播放'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(services.player.current?.id, '1');
+    expect(button('暂停'), findsOneWidget);
+
+    await tester.tap(button('暂停'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(services.player.isPlaying, isFalse);
+    expect(button('继续播放'), findsOneWidget);
+    // 其他推荐还是普通播放按钮。
+    final other = find.ancestor(of: find.text('推荐2'), matching: find.byType(InkWell)).first;
+    expect(find.descendant(of: other, matching: find.byTooltip('播放')), findsOneWidget);
+    // 等播放相关的计时器走完。
+    await tester.pump(const Duration(seconds: 11));
+  });
 
   testWidgets('home shows song recommendations in columns of three (phone)', (tester) async {
     await pumpHome(tester, const Size(400, 1400));
@@ -159,22 +186,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('drawer items open as their own page; back returns home', (tester) async {
+  testWidgets('discover has playlist square, toplists and new songs tabs', (tester) async {
     await pumpHome(tester, const Size(400, 900));
-    await tester.tap(find.byTooltip('个人中心'));
+    await tester.tap(find.text('发现'));
     await settle(tester);
-    await tester.tap(find.text('新歌速递'));
+    expect(find.text('歌单广场'), findsOneWidget);
+    expect(find.text('排行榜'), findsOneWidget);
+    expect(find.text('最新音乐'), findsOneWidget);
+    expect(find.text('歌手'), findsNothing);
+    expect(requests, contains('/weapi/playlist/list'));
+
+    await tester.tap(find.text('最新音乐'));
     await settle(tester);
     expect(requests, contains('/api/v1/discovery/new/songs'));
     expect(find.text('华语'), findsOneWidget);
-    // 单独的页面：标题栏有返回键。
-    expect(find.byType(BackButton), findsOneWidget);
 
-    // 系统返回回到首页，不会退出应用。
-    await tester.binding.handlePopRoute();
+    await tester.tap(find.text('排行榜'));
     await settle(tester);
-    expect(find.text('华语'), findsNothing);
-    expect(find.text('根据你喜爱的歌曲推荐'), findsOneWidget);
+    expect(requests, contains('/api/toplist'));
     expect(tester.takeException(), isNull);
   });
 
@@ -205,5 +234,18 @@ void main() {
     await settle(tester);
     expect(fetches(), 2);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('personal FM mode can be picked and is remembered', (tester) async {
+    final services = await pumpHome(tester, const Size(400, 1400));
+    expect(find.text('推荐模式'), findsOneWidget);
+    await tester.tap(find.text('推荐模式'));
+    await tester.pumpAndSettle();
+    expect(find.text('私人 FM 模式'), findsOneWidget);
+    expect(find.text('探索'), findsOneWidget);
+    await tester.tap(find.text('运动'));
+    await tester.pumpAndSettle();
+    expect(services.settings.fmMode, FmMode.exercise);
+    expect(find.text('运动模式'), findsOneWidget);
   });
 }
