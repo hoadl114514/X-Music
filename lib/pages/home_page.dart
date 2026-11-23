@@ -482,9 +482,12 @@ class _SongRcmdRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final song = item.song;
-    final playing = PlayerScope.of(context).current?.id == song.id;
+    final player = PlayerScope.of(context);
+    final playing = player.current?.id == song.id;
     final liked = AccountScope.of(context).isLiked(song.id);
     void play() => PlayerScope.read(context).playQueue(songs, start: index, title: '为你推荐');
+    // 正在放的这首：按钮变成暂停 / 继续，不从头再放。
+    final sounding = playing && player.isPlaying;
     // 推荐理由优先，没有时显示音质角标，和官方一样两者只显示一个。
     final badge = item.tag ?? item.quality;
     return SizedBox(
@@ -545,10 +548,13 @@ class _SongRcmdRow extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: '播放',
+              tooltip: sounding ? '暂停' : (playing ? '继续播放' : '播放'),
               visualDensity: VisualDensity.compact,
-              onPressed: play,
-              icon: Icon(Icons.play_arrow_rounded, color: context.colors.textSecondary),
+              onPressed: playing ? () => PlayerScope.read(context).toggle() : play,
+              icon: Icon(
+                sounding ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: playing ? context.colors.accent : context.colors.textSecondary,
+              ),
             ),
           ],
         ),

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
+import 'package:netease_client/app/services.dart';
 import 'package:netease_client/pages/home_page.dart';
 
 import 'support/fakes.dart';
@@ -96,7 +97,7 @@ void main() {
     }
   }
 
-  Future<void> pumpHome(WidgetTester tester, Size size) async {
+  Future<AppServices> pumpHome(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -117,7 +118,32 @@ void main() {
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
+    return f.services;
   }
+
+  testWidgets('the playing recommendation shows pause and toggles playback', (tester) async {
+    final services = await pumpHome(tester, const Size(400, 1400));
+    final row = find.ancestor(of: find.text('推荐1'), matching: find.byType(InkWell)).first;
+    Finder button(String tip) => find.descendant(of: row, matching: find.byTooltip(tip));
+    expect(button('播放'), findsOneWidget);
+
+    await tester.tap(button('播放'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(services.player.current?.id, '1');
+    expect(button('暂停'), findsOneWidget);
+
+    await tester.tap(button('暂停'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(services.player.isPlaying, isFalse);
+    expect(button('继续播放'), findsOneWidget);
+    // 其他推荐还是普通播放按钮。
+    final other = find.ancestor(of: find.text('推荐2'), matching: find.byType(InkWell)).first;
+    expect(find.descendant(of: other, matching: find.byTooltip('播放')), findsOneWidget);
+    // 等播放相关的计时器走完。
+    await tester.pump(const Duration(seconds: 11));
+  });
 
   testWidgets('home shows song recommendations in columns of three (phone)', (tester) async {
     await pumpHome(tester, const Size(400, 1400));
