@@ -142,11 +142,12 @@ class AccountController extends ChangeNotifier {
     await _reloadPlaylists().catchError((Object _) {});
   }
 
-  /// 能删歌的歌单：自己创建的和「我喜欢的音乐」。
   /// 是不是共建歌单：接口标了，或者是在本机建的共建歌单。
   bool isShared(Playlist p) => p.shared || _settings.sharedPlaylistIds.contains(p.id);
 
-  bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id;
+  /// 能删歌的歌单：自己创建的、「我喜欢的音乐」和共建歌单。
+  /// 共建歌单的协作者也能删歌（自己加的和别人加的都行，和官方 App 一致）。
+  bool canEditTracks(Playlist p) => isOwn(p) || likedPlaylist?.id == p.id || isShared(p);
 
   /// 启动时用保存的 Cookie 恢复登录。网络失败时保留 Cookie，下次再试。
   Future<void> restore() async {

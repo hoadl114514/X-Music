@@ -81,6 +81,23 @@ void main() {
           ],
         });
       }
+      if (path == '/api/v6/playlist/detail' && r.bodyFields['id'] == '44') {
+        return _json({
+          'code': 200,
+          'playlist': {
+            'id': 44,
+            'name': '朋友的共享',
+            'specialType': 300,
+            'trackIds': [
+              {'id': 500, 'uid': 3},
+            ],
+            'creator': {'userId': 3, 'nickname': '朋友'},
+            'sharedUsers': [
+              {'userId': 1, 'nickname': '我'},
+            ],
+          },
+        });
+      }
       if (path == '/api/v6/playlist/detail' && r.bodyFields['id'] == '43') {
         // 歌单详情里的成员带昵称和头像。
         return _json({
@@ -228,5 +245,13 @@ void main() {
     await tester.tap(find.text('自建歌单'));
     await tester.pumpAndSettle();
     expect(find.text('管理'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // 加入的别人的共建歌单：协作者也能删歌。
+    await tester.tap(find.text('朋友的共享'));
+    await tester.pumpAndSettle();
+    expect(find.text('管理'), findsOneWidget);
+    expect(find.text('批量删除'), findsOneWidget);
   });
 }
