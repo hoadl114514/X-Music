@@ -5,6 +5,7 @@ import '../../data/format.dart';
 import '../../data/models.dart';
 import '../../state/account_controller.dart';
 import '../music/nav.dart';
+import '../social/social_widgets.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/cover_art.dart';
 import '../../widgets/playlist_card.dart';
@@ -158,7 +159,7 @@ class _SubscribeButtonState extends State<_SubscribeButton> {
   }
 }
 
-/// 共建歌单标题下的「邀请好友」：成员头像叠在一起，后面一个「+」，点了分享邀请。
+/// 共建歌单标题下的成员条：成员头像叠在一起，后面一个「管理」，点了打开成员管理面板。
 class _InviteRow extends StatelessWidget {
   const _InviteRow({required this.playlist, this.info});
 
@@ -177,6 +178,74 @@ class _InviteRow extends StatelessWidget {
       subject: '共建歌单',
       title: '邀请好友一起编辑歌单',
       copied: '已复制邀请链接',
+    );
+  }
+
+  /// 成员管理面板：全部成员（创建者在最前），点成员进主页；底部邀请好友。
+  Future<void> _showMembers(BuildContext context) {
+    final account = AccountScope.read(context);
+    final me = account.profile;
+    final members = info?.members ?? const <SocialUser>[];
+    final creatorId = info?.creator?.userId ?? playlist.creatorId;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  members.isEmpty ? '共享歌单成员' : '共享歌单成员 · ${members.length} 人',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+              Flexible(
+                child: members.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: Text('成员加载中，稍后再试')),
+                      )
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final u in members)
+                            ListTile(
+                              leading: SocialAvatar(userId: u.userId, url: u.avatarUrl, size: 40),
+                              title: Text(
+                                u.userId == me?.userId ? '${u.nickname}（我）' : u.nickname,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(u.userId == creatorId ? '创建者' : '成员'),
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                openUser(context, u.userId, name: u.nickname);
+                              },
+                            ),
+                        ],
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _invite();
+                  },
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: const Text('邀请好友'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -207,7 +276,7 @@ class _InviteRow extends StatelessWidget {
     );
     final count = members.length + 1;
     return InkWell(
-      onTap: _invite,
+      onTap: () => _showMembers(context),
       borderRadius: BorderRadius.circular(_size),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
@@ -233,7 +302,7 @@ class _InviteRow extends StatelessWidget {
                   Positioned(
                     left: _step * members.length,
                     child: circle(
-                      Icon(Icons.add_rounded, size: 16, color: scheme.onSurfaceVariant),
+                      Icon(Icons.manage_accounts_rounded, size: 16, color: scheme.onSurfaceVariant),
                       color: scheme.surfaceContainerHighest,
                     ),
                   ),
@@ -242,7 +311,7 @@ class _InviteRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              '邀请好友',
+              '管理',
               style: Theme.of(context).textTheme.titleSmall
                   ?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w600),
             ),

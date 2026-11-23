@@ -195,18 +195,28 @@ void main() {
     await pump(tester);
     await tester.tap(find.text('一起建的歌'));
     await tester.pumpAndSettle();
-    expect(find.text('邀请好友'), findsOneWidget);
+    expect(find.text('管理'), findsOneWidget);
     // 成员昵称从歌单详情补全，头像位置显示昵称首字。
     expect(find.text('好'), findsNWidgets(2)); // 邀请行和添加人各一个。
     expect(find.text('?'), findsNothing);
     // 每首歌下面显示谁添加的。
     expect(find.text('好友加的歌'), findsOneWidget);
     expect(find.text('好友 添加'), findsOneWidget);
+    // 「管理」打开成员面板：创建者在最前，底部邀请好友。
+    await tester.tap(find.text('管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('共享歌单成员 · 2 人'), findsOneWidget);
+    expect(find.text('我（我）'), findsOneWidget);
+    expect(find.text('创建者'), findsOneWidget);
+    expect(find.text('好友'), findsOneWidget);
+    expect(find.text('邀请好友'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('自建歌单'));
     await tester.pumpAndSettle();
-    expect(find.text('邀请好友'), findsNothing);
+    expect(find.text('管理'), findsNothing);
   });
 }
