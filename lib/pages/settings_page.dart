@@ -80,14 +80,22 @@ class SettingsPage extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.lyrics_outlined),
             title: const Text('默认歌词来源'),
-            subtitle: const Text('没有歌词时自动尝试另一个来源'),
-            trailing: SegmentedButton<LyricSource>(
-              segments: [
-                for (final s in LyricSource.values) ButtonSegment(value: s, label: Text(s.label)),
+            // 三个来源放在右侧会把标题挤窄，放到副标题下面。
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('没有歌词时自动尝试其他来源'),
+                const SizedBox(height: 8),
+                SegmentedButton<LyricSource>(
+                  segments: [
+                    for (final s in LyricSource.values)
+                      ButtonSegment(value: s, label: Text(s.label)),
+                  ],
+                  selected: {settings.lyricSource},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (v) => settings.lyricSource = v.first,
+                ),
               ],
-              selected: {settings.lyricSource},
-              showSelectedIcon: false,
-              onSelectionChanged: (v) => settings.lyricSource = v.first,
             ),
           ),
           SwitchListTile(

@@ -211,29 +211,35 @@ class _SongMenu extends StatelessWidget {
               ListTile(
                 leading: Icon(Icons.lyrics_outlined, color: context.colors.textPrimary),
                 title: const Text('歌词来源'),
-                subtitle: Text(
-                  player.lyricsLoading
-                      ? '加载中…'
-                      : lyrics.isEmpty
-                      ? '暂无歌词'
-                      : [
-                          lyrics.source!.label,
-                          lyrics.wordSynced ? '逐字' : '逐行',
-                          if (lyrics.hasTranslation) '翻译',
-                          if (lyrics.hasRomaji) '罗马音',
-                        ].join(' · '),
-                ),
-                trailing: SegmentedButton<LyricSource>(
-                  segments: [
-                    for (final s in LyricSource.values)
-                      ButtonSegment(value: s, label: Text(s.label)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      player.lyricsLoading
+                          ? '加载中…'
+                          : lyrics.isEmpty
+                          ? '暂无歌词'
+                          : [
+                              lyrics.source!.label,
+                              lyrics.wordSynced ? '逐字' : '逐行',
+                              if (lyrics.hasTranslation) '翻译',
+                              if (lyrics.hasRomaji) '罗马音',
+                            ].join(' · '),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<LyricSource>(
+                      segments: [
+                        for (final s in LyricSource.values)
+                          ButtonSegment(value: s, label: Text(s.label)),
+                      ],
+                      selected: {?lyrics.source},
+                      emptySelectionAllowed: true,
+                      showSelectedIcon: false,
+                      onSelectionChanged: (v) {
+                        if (v.isNotEmpty) player.setLyricSource(v.first);
+                      },
+                    ),
                   ],
-                  selected: {?lyrics.source},
-                  emptySelectionAllowed: true,
-                  showSelectedIcon: false,
-                  onSelectionChanged: (v) {
-                    if (v.isNotEmpty) player.setLyricSource(v.first);
-                  },
                 ),
               ),
               if (lyrics.hasTranslation)

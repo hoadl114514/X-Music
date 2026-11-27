@@ -165,6 +165,7 @@ void main() {
     await settle(tester);
     expect(find.text('歌词来源'), findsOneWidget);
     expect(find.textContaining('网易云 · 逐字 · 翻译'), findsOneWidget);
+    expect(find.text('AMLL'), findsOneWidget);
     await tester.tap(find.byTooltip('歌词提前 0.5s'));
     await tester.pump();
     expect(find.text('+0.5s'), findsOneWidget);

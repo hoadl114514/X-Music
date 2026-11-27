@@ -409,7 +409,8 @@ class LyricLine {
 
 enum LyricSource {
   netease('网易云'),
-  qq('QQ 音乐');
+  qq('QQ 音乐'),
+  amll('AMLL');
 
   const LyricSource(this.label);
 

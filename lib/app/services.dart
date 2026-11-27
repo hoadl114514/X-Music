@@ -9,6 +9,7 @@ import '../audio/audio_engine.dart';
 import '../audio/audio_output.dart';
 import '../audio/system_media.dart';
 import '../data/track_cache.dart';
+import '../lyrics/amll_lyrics.dart';
 import '../lyrics/lyric_service.dart';
 import '../lyrics/qq_lyrics.dart';
 import '../state/account_controller.dart';
@@ -39,7 +40,7 @@ class AppServices {
     unawaited(ImageDiskCache.prune());
     final settings = await AppSettings.load();
     final api = NeteaseApi(cookies: parseCookie(settings.cookie), deviceId: settings.deviceId);
-    final lyrics = LyricService(netease: api, qq: QqLyrics());
+    final lyrics = LyricService(netease: api, qq: QqLyrics(), amll: AmllLyrics());
     final audioCache = AudioCache.system(limit: () => settings.audioCacheLimit);
     unawaited(audioCache.init());
     await JustAudioEngine.configureSession();
