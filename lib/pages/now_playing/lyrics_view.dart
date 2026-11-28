@@ -313,18 +313,42 @@ class _LyricLine extends StatelessWidget {
             children: [
               _text(line, fontSize, dimmed),
               ...extras(line, 1),
-              // 背景人声：字号小一些，唱到时同样逐字填色。
-              if (bg != null) ...[
-                SizedBox(height: fontSize * 0.25),
-                _text(bg, fontSize * 0.62, dimmed),
-                ...extras(bg, 0.8),
-              ],
+              // 背景人声：字号小一些，唱到时同样逐字填色。还没唱到时收起，唱到时展开浮现；
+              // 唱过的行保持展开，避免当前行上方的内容高度变化导致跳动。
+              if (bg != null)
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 420),
+                  curve: Curves.easeOutCubic,
+                  alignment: line.duet ? Alignment.topRight : Alignment.topLeft,
+                  child: AnimatedOpacity(
+                    opacity: _showBackground(bg) ? 1 : 0,
+                    duration: const Duration(milliseconds: 420),
+                    curve: Curves.easeOut,
+                    child: _showBackground(bg)
+                        ? Column(
+                            crossAxisAlignment: align,
+                            children: [
+                              SizedBox(height: fontSize * 0.25),
+                              _text(bg, fontSize * 0.62, dimmed),
+                              ...extras(bg, 0.8),
+                            ],
+                          )
+                        : const SizedBox(width: double.infinity),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// 背景人声是否显示：唱过的行显示；当前行唱到背景人声时显示；还没唱到的不显示。
+  bool _showBackground(LyricLine bg) => switch (state) {
+    _LineState.past => true,
+    _LineState.active => position >= bg.start,
+    _LineState.future => false,
+  };
 
   /// 一行歌词正文。所有状态用同一次排版，当前行逐字填色。
   Widget _text(LyricLine l, double size, Color dimmed) {
