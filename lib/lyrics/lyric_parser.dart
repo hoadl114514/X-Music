@@ -188,6 +188,13 @@ abstract final class LyricParser {
     return out;
   }
 
+  /// 把带时间的文本（如另一个来源的罗马音）挂到时间最近的行上，规则同翻译。
+  static List<LyricLine> attachByTime(
+    List<LyricLine> lines,
+    List<(Duration, String)> extra,
+    LyricLine Function(LyricLine line, String text) apply,
+  ) => _attach(lines, [for (final (at, t) in extra) RawLine(at.inMilliseconds, null, t)], apply);
+
   /// 每条附加行最多用一次，挂到时间最近的原文行上。
   static List<LyricLine> _attach(
     List<LyricLine> lines,

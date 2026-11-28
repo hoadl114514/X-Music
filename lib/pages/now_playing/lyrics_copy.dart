@@ -5,10 +5,15 @@ import '../../theme/app_theme.dart';
 import '../../widgets/copy_sheet.dart';
 import '../../widgets/free_copy_page.dart';
 
-/// 把选中的歌词行拼成文本：每行原文，后面按需跟翻译、罗马音。
+/// 把选中的歌词行拼成文本：每行原文（背景人声加括号跟在后面），再按需跟翻译、罗马音。
 String lyricsText(Iterable<LyricLine> lines, {bool translation = false, bool romaji = false}) => [
   for (final l in lines)
-    [l.text, if (translation) ?l.translation, if (romaji) ?l.romaji].join('\n'),
+    [
+      l.text,
+      if (l.background case final bg?) '(${bg.text})',
+      if (translation) ?l.translation,
+      if (romaji) ?l.romaji,
+    ].join('\n'),
 ].join('\n');
 
 /// 长按某一行歌词：复制这一行，或进入批量选择。

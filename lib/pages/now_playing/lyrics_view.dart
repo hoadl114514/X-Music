@@ -233,20 +233,33 @@ class _LyricLine extends StatelessWidget {
 
   Widget _build(double f) {
     final dimmed = _dim.withValues(alpha: _dim.a * f);
-    final style = TextStyle(fontSize: fontSize, fontWeight: FontWeight.w800, height: 1.25);
-    final Widget main = switch (state) {
-      _LineState.active when !wordSynced => Text(line.text, style: style.copyWith(color: _sung)),
-      _LineState.active => Wrap(
-        children: [
-          for (final w in line.words)
-            _KaraokeWord(text: w.text, progress: w.progressAt(position), style: style),
-        ],
-      ),
-      _LineState.past || _LineState.future => Text(line.text, style: style.copyWith(color: dimmed)),
-    };
     final active = state == _LineState.active;
     final sub = active ? _sung.withValues(alpha: 0.8) : dimmed;
+    final align = line.duet ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final textAlign = line.duet ? TextAlign.right : TextAlign.left;
 
+    List<Widget> extras(LyricLine l, double scale) => [
+      if (l.translation case final t? when showTranslation) ...[
+        SizedBox(height: fontSize * 0.2 * scale),
+        Text(
+          t,
+          textAlign: textAlign,
+          style: TextStyle(
+            fontSize: fontSize * 0.6 * scale,
+            fontWeight: FontWeight.w600,
+            color: sub,
+          ),
+        ),
+      ],
+      if (l.romaji case final r? when showRomaji)
+        Text(
+          r,
+          textAlign: textAlign,
+          style: TextStyle(fontSize: fontSize * 0.48 * scale, letterSpacing: 0.3, color: sub),
+        ),
+    ];
+
+    final bg = line.background;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -256,25 +269,16 @@ class _LyricLine extends StatelessWidget {
         child: _effects(
           active,
           Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: align,
             children: [
-              main,
-              if (line.translation case final t? when showTranslation) ...[
-                SizedBox(height: fontSize * 0.2),
-                Text(
-                  t,
-                  style: TextStyle(
-                    fontSize: fontSize * 0.6,
-                    fontWeight: FontWeight.w600,
-                    color: sub,
-                  ),
-                ),
+              _text(line, fontSize, dimmed),
+              ...extras(line, 1),
+              // 背景人声：字号小一些，唱到时同样逐字填色。
+              if (bg != null) ...[
+                SizedBox(height: fontSize * 0.25),
+                _text(bg, fontSize * 0.62, dimmed),
+                ...extras(bg, 0.8),
               ],
-              if (line.romaji case final r? when showRomaji)
-                Text(
-                  r,
-                  style: TextStyle(fontSize: fontSize * 0.48, letterSpacing: 0.3, color: sub),
-                ),
             ],
           ),
         ),
@@ -282,11 +286,56 @@ class _LyricLine extends StatelessWidget {
     );
   }
 
-  /// 当前行原尺寸，其他行略小（左对齐缩放，只是变换，不建离屏层）。
+  /// 一行歌词正文。当前行逐字填色；有注音时每个字单独排版，注音放在字上方。
+  Widget _text(LyricLine l, double size, Color dimmed) {
+    final style = TextStyle(fontSize: size, fontWeight: FontWeight.w800, height: 1.25);
+    final textAlign = line.duet ? TextAlign.right : TextAlign.left;
+    final wrapAlign = line.duet ? WrapAlignment.end : WrapAlignment.start;
+    final active = state == _LineState.active;
+    final hasRuby = l.words.any((w) => w.ruby != null);
+    if (active && wordSynced) {
+      return Wrap(
+        alignment: wrapAlign,
+        crossAxisAlignment: WrapCrossAlignment.end,
+        children: [
+          for (final w in l.words)
+            _KaraokeWord(
+              text: w.text,
+              ruby: w.ruby,
+              progress: w.progressAt(position),
+              style: style,
+            ),
+        ],
+      );
+    }
+    final color = active ? _sung : dimmed;
+    if (!hasRuby) {
+      return Text(
+        l.text,
+        textAlign: textAlign,
+        style: style.copyWith(color: color),
+      );
+    }
+    return Wrap(
+      alignment: wrapAlign,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      children: [
+        for (final w in l.words)
+          _Ruby(
+            ruby: w.ruby,
+            size: size,
+            color: color,
+            child: Text(w.text, style: style.copyWith(color: color)),
+          ),
+      ],
+    );
+  }
+
+  /// 当前行原尺寸，其他行略小（按对齐的一侧缩放，只是变换，不建离屏层）。
   Widget _effects(bool active, Widget child) {
     return AnimatedScale(
       scale: active ? 1 : 0.94,
-      alignment: Alignment.centerLeft,
+      alignment: line.duet ? Alignment.centerRight : Alignment.centerLeft,
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOutCubic,
       child: child,
@@ -294,17 +343,58 @@ class _LyricLine extends StatelessWidget {
   }
 }
 
+/// 注音放在字的正上方。没有注音时原样返回。
+class _Ruby extends StatelessWidget {
+  const _Ruby({required this.ruby, required this.size, required this.color, required this.child});
+
+  final String? ruby;
+  final double size;
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ruby;
+    if (r == null) return child;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          r,
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontSize: size * 0.42,
+            fontWeight: FontWeight.w600,
+            height: 1.1,
+            color: color,
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
 /// 单个字的逐字填色：底层半透明文字，上层白色文字按 [progress] 从左往右显现；
 /// 唱这个字时整体上浮一点并带柔光，唱完保持上浮。
 class _KaraokeWord extends StatelessWidget {
-  const _KaraokeWord({required this.text, required this.progress, required this.style});
+  const _KaraokeWord({required this.text, required this.progress, required this.style, this.ruby});
 
   final String text;
+  final String? ruby;
   final double progress;
   final TextStyle style;
 
   @override
   Widget build(BuildContext context) {
+    final word = _word();
+    if (ruby == null) return word;
+    final color = progress > 0 ? _sung : _dim;
+    return _Ruby(ruby: ruby, size: style.fontSize!, color: color, child: word);
+  }
+
+  Widget _word() {
     final dim = Text(text, style: style.copyWith(color: _dim));
     if (progress <= 0) return dim;
     // 光晕在唱到一半时最亮，唱完消失。

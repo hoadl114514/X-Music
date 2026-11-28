@@ -365,11 +365,14 @@ class SongUrl {
 
 /// 逐字歌词里的一个"字"（实际上可以是一个词或一个音节）。
 class LyricWord {
-  const LyricWord(this.text, this.start, this.end);
+  const LyricWord(this.text, this.start, this.end, {this.ruby});
 
   final String text;
   final Duration start;
   final Duration end;
+
+  /// 注音（日语振假名、拼音等），显示在字的上方。只有 TTML 歌词会有。
+  final String? ruby;
 
   /// 在 [position] 时该字已唱出的比例，0–1。
   double progressAt(Duration position) {
@@ -386,6 +389,8 @@ class LyricLine {
     required this.words,
     this.translation,
     this.romaji,
+    this.duet = false,
+    this.background,
   });
 
   final Duration start;
@@ -396,6 +401,13 @@ class LyricLine {
   final String? translation;
   final String? romaji;
 
+  /// 对唱：由另一位歌手演唱，靠右显示。只有 TTML 歌词会有。
+  final bool duet;
+
+  /// 背景人声（和声），跟在主歌词下面、字号更小。只有 TTML 歌词会有。
+  /// 它自己的 [start]、[end] 不影响当前行的判断。
+  final LyricLine? background;
+
   String get text => words.map((w) => w.text).join();
 
   LyricLine copyWith({String? translation, String? romaji}) => LyricLine(
@@ -404,6 +416,8 @@ class LyricLine {
     words: words,
     translation: translation ?? this.translation,
     romaji: romaji ?? this.romaji,
+    duet: duet,
+    background: background,
   );
 }
 

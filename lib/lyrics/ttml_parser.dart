@@ -2,14 +2,20 @@ import 'dart:math';
 
 import '../data/models.dart';
 
-/// TTML 歌词解析，按 AMLL（Apple Music-like Lyrics）社区歌词库的写法。
+/// TTML 歌词解析，对齐 AMLL（Apple Music-like Lyrics）的 TTML 规范和官方解析器
+/// （amll-dev/applemusic-like-lyrics 的 packages/ttml）。
 ///
-/// - `<p>` 是一行，里面带 `begin`/`end` 的 `<span>` 是一个字（词、音节）。
-/// - span 之间的空格文本是词间空格，挂到前一个字后面。
-/// - `ttm:role="x-translation"` / `"x-roman"` 的 span 是这一行的翻译 / 罗马音。
-/// - Apple Music 写法的翻译放在 `<head>` 的 `<translations>` 里，按 `itunes:key` 对应到行。
-/// - `ttm:role="x-bg"` 是背景人声。当前歌词模型不支持多声部，先丢弃。
-/// - `<p>` 里没有计时 span 时按逐行歌词处理。
+/// 支持：
+/// - 逐字（`itunes:timing="Word"`）和逐行（`"Line"`，或没有计时 span）。
+/// - 词间空格：span 之间的空格文本，以及 span 首尾的空格。排版用的换行缩进忽略。
+/// - 行内翻译 / 音译（`ttm:role="x-translation"` / `"x-roman"`），以及 `<head>` 里
+///   Apple Music 式的 `<translations>` / `<transliterations>`（按 `itunes:key` 对应）。
+///   多种语言时优先中文。
+/// - 背景人声（`ttm:role="x-bg"`），带自己的逐字时间、翻译和音译；去掉首尾括号。
+/// - 对唱（`ttm:agent`）：按 AMLL 的规则在左右两侧交替，合唱（group）不算对唱。
+/// - Ruby 注音（`tts:ruby`）：基文本做字，注音文本挂在字上。
+///
+/// 不支持（解析时忽略）：`amll:obscene`、`amll:empty-beat`、`itunes:song-part`。
 ///
 /// 时间支持 `ss.fff`、`m:ss.fff`、`h:mm:ss.fff`，以及带 `s` / `ms` 后缀的写法。
 abstract final class TtmlParser {
@@ -19,29 +25,67 @@ abstract final class TtmlParser {
     final tt = root.find('tt') ?? root;
     final body = tt.find('body');
     if (body == null) return Lyrics.empty;
+    final lineTiming = tt.attr('timing') == 'Line';
 
-    final headTrans = <String, String>{};
-    final headRoma = <String, String>{};
-    if (tt.find('head') case final head?) {
-      _collectHeadTexts(head, 'translation', headTrans);
-      _collectHeadTexts(head, 'transliteration', headRoma);
-    }
+    final head = tt.find('head');
+    final agents = <String, String>{
+      if (head != null)
+        for (final a in head.findAll('agent')) ?a.attr('id'): a.attr('type') ?? 'person',
+    };
+    final headTrans = head == null ? const <String, List<_Sub>>{} : _sidecar(head, 'translation');
+    final headRoma = head == null
+        ? const <String, List<_Sub>>{}
+        : _sidecar(head, 'transliteration');
 
     final raws = <_Line>[];
+    // 对唱判定，和 AMLL 一致：合唱不参与；第一位歌手类型为 other 时放右侧；
+    // 换了一位歌手就换一侧。
+    String? lastAgent;
+    var lastDuet = false;
     for (final p in body.findAll('p')) {
-      final line = _readLine(p);
-      if (line == null) continue;
+      final c = _Content.read(p);
       final key = p.attr('key');
-      raws.add(
-        _Line(
-          line.start,
-          line.end,
-          line.words,
-          line.timedWords,
-          line.translation ?? (key == null ? null : headTrans[key]),
-          line.romaji ?? (key == null ? null : headRoma[key]),
-        ),
+      final main = c.toLine(
+        begin: parseTime(p.attr('begin')),
+        end: parseTime(p.attr('end')),
+        lineTiming: lineTiming,
+        translations: [...c.translations, ...?headTrans[key]?.map((s) => s.main)],
+        romanizations: [...c.romanizations, ...?headRoma[key]?.map((s) => s.main)],
       );
+      if (main == null) continue;
+
+      final agent = p.attr('agent') ?? 'v1';
+      var duet = false;
+      if (agents[agent] != 'group') {
+        if (lastAgent == null) {
+          duet = agents[agent] == 'other';
+        } else {
+          duet = agent == lastAgent ? lastDuet : !lastDuet;
+        }
+        lastAgent = agent;
+        lastDuet = duet;
+      }
+
+      _Line? bg;
+      if (c.background case final b?) {
+        bg = b.toLine(
+          begin: b.begin,
+          end: b.end,
+          lineTiming: lineTiming,
+          translations: [
+            ...b.translations,
+            ...c.bgTranslations,
+            ...?headTrans[key]?.map((s) => s.bg),
+          ],
+          romanizations: [
+            ...b.romanizations,
+            ...c.bgRomanizations,
+            ...?headRoma[key]?.map((s) => s.bg),
+          ],
+          stripParens: true,
+        );
+      }
+      raws.add(main.withExtras(duet: duet, background: bg));
     }
     raws.sort((a, b) => a.start - b.start);
 
@@ -51,104 +95,29 @@ abstract final class TtmlParser {
       final l = raws[i];
       if (songEnd != null && songEnd > 0 && l.start >= songEnd) continue;
       final next = i + 1 < raws.length ? raws[i + 1].start : null;
-      final end = max(
-        l.end ?? next ?? (songEnd != null && songEnd > l.start ? songEnd : l.start + 10000),
-        l.start + 1,
-      );
-      final words = l.timedWords
-          ? l.words
-          : [_Word(l.start, end, l.words.map((w) => w.text).join())];
-      lines.add(
-        LyricLine(
-          start: _ms(l.start),
-          end: _ms(end),
-          words: [
-            for (final w in words)
-              if (w.text.isNotEmpty) LyricWord(w.text, _ms(w.start), _ms(max(w.end, w.start))),
-          ],
-          translation: l.translation,
-          romaji: l.romaji,
-        ),
-      );
+      final fallbackEnd =
+          next ?? (songEnd != null && songEnd > l.start ? songEnd : l.start + 10000);
+      lines.add(l.build(fallbackEnd));
     }
     if (lines.isEmpty) return Lyrics.empty;
     return Lyrics(lines: lines, source: source, wordSynced: raws.any((l) => l.timedWords));
   }
 
-  static _Line? _readLine(_XmlElement p) {
-    final words = <_Word>[];
-    final plain = StringBuffer();
-    String? translation;
-    String? romaji;
-    var timed = false;
-
-    void addText(String raw) {
-      final t = _normalizeSpace(raw);
-      if (t.isEmpty) return;
-      if (words.isNotEmpty) {
-        words.last = words.last.append(t);
-      } else {
-        plain.write(t);
+  /// `<translation xml:lang><text for="L1">…</text></translation>`：行 key → 各语言的内容。
+  static Map<String, List<_Sub>> _sidecar(_XmlElement head, String tag) {
+    final out = <String, List<_Sub>>{};
+    for (final group in head.findAll(tag)) {
+      final lang = group.attr('lang');
+      for (final t in group.findAll('text')) {
+        final key = t.attr('for');
+        if (key == null) continue;
+        final c = _Content.read(t);
+        out
+            .putIfAbsent(key, () => [])
+            .add(_Sub((lang, c.plainText), (lang, c.background?.plainText ?? '')));
       }
     }
-
-    for (final child in p.children) {
-      if (child is String) {
-        addText(child);
-        continue;
-      }
-      final span = child as _XmlElement;
-      if (span.name != 'span') {
-        addText(span.text);
-        continue;
-      }
-      switch (span.attr('role')) {
-        case 'x-translation':
-          translation ??= _nonEmpty(span.text);
-        case 'x-roman':
-          romaji ??= _nonEmpty(span.text);
-        case 'x-bg':
-          break;
-        default:
-          final begin = parseTime(span.attr('begin'));
-          final end = parseTime(span.attr('end'));
-          final text = _normalizeSpace(span.text);
-          if (begin == null || end == null) {
-            addText(text);
-          } else if (text.isNotEmpty) {
-            timed = true;
-            // 计时 span 之前的未计时文本并进第一个字。
-            final prefix = plain.toString();
-            plain.clear();
-            words.add(_Word(begin, end, '$prefix$text'));
-          }
-      }
-    }
-
-    final pBegin = parseTime(p.attr('begin'));
-    final pEnd = parseTime(p.attr('end'));
-    if (!timed) {
-      final text = plain.toString().trim();
-      if (text.isEmpty || pBegin == null) return null;
-      return _Line(pBegin, pEnd, [_Word(pBegin, pEnd ?? pBegin, text)], false, translation, romaji);
-    }
-    // 行首、行尾的空格去掉；字之间的空格保留。
-    words.first = words.first.trimLeft();
-    words.last = words.last.trimRight();
-    final start = pBegin ?? words.map((w) => w.start).reduce(min);
-    final end = max(pEnd ?? 0, words.map((w) => w.end).reduce(max));
-    return _Line(start, end, words, true, translation, romaji);
-  }
-
-  /// `<translation><text for="L1">…</text></translation>`，取第一种语言。
-  static void _collectHeadTexts(_XmlElement head, String tag, Map<String, String> out) {
-    final first = head.findAll(tag).firstOrNull;
-    if (first == null) return;
-    for (final t in first.findAll('text')) {
-      final key = t.attr('for');
-      final text = _nonEmpty(_normalizeSpace(t.text));
-      if (key != null && text != null) out.putIfAbsent(key, () => text);
-    }
+    return out;
   }
 
   /// 毫秒。无法解析时返回 null。
@@ -175,34 +144,239 @@ abstract final class TtmlParser {
     return (total * scale).round();
   }
 
-  /// 空白折叠成一个空格。带换行的纯空白是排版缩进，不是词间空格，直接丢掉。
-  static String _normalizeSpace(String s) {
-    if (s.trim().isEmpty && s.contains('\n')) return '';
-    return s.replaceAll(RegExp(r'\s+'), ' ');
+  /// 多种语言时优先简体中文，其次其他中文，最后取第一个。空文本跳过。
+  static String? pickLanguage(List<(String?, String)> items) {
+    final valid = [
+      for (final (lang, text) in items)
+        if (text.trim().isNotEmpty) (lang?.toLowerCase() ?? '', text.trim()),
+    ];
+    if (valid.isEmpty) return null;
+    for (final test in <bool Function(String)>[
+      (l) => l.startsWith('zh-hans') || l == 'zh-cn' || l.startsWith('zh-cn'),
+      (l) => l.startsWith('zh'),
+    ]) {
+      for (final (lang, text) in valid) {
+        if (test(lang)) return text;
+      }
+    }
+    return valid.first.$2;
   }
 
-  static String? _nonEmpty(String s) {
-    final t = s.trim();
-    return t.isEmpty ? null : t;
-  }
+  static final _space = RegExp(r'\s+');
+
+  /// 空白折叠成一个空格。
+  static String _collapse(String s) => s.replaceAll(_space, ' ');
 
   static Duration _ms(int v) => Duration(milliseconds: v);
 }
 
+/// 侧边（head）里一行的翻译或音译：主歌词部分和背景人声部分，各带语言。
+class _Sub {
+  const _Sub(this.main, this.bg);
+
+  final (String?, String) main;
+  final (String?, String) bg;
+}
+
 class _Word {
-  const _Word(this.start, this.end, this.text);
+  _Word(this.start, this.end, this.text, {this.ruby});
 
   final int start;
   final int end;
-  final String text;
+  String text;
+  final String? ruby;
+}
 
-  _Word append(String t) => _Word(start, end, '$text$t');
-  _Word trimLeft() => _Word(start, end, text.trimLeft());
-  _Word trimRight() => _Word(start, end, text.trimRight());
+/// 一个 `<p>`（或背景人声 span、翻译 span、head 里的 `<text>`）里读出来的东西。
+class _Content {
+  _Content(this.begin, this.end);
+
+  final int? begin;
+  final int? end;
+  final words = <_Word>[];
+
+  /// 整行文本（含未计时的文字），逐行模式和翻译用。
+  final full = StringBuffer();
+  final translations = <(String?, String)>[];
+  final romanizations = <(String?, String)>[];
+
+  /// 主歌词的翻译 / 音译 span 里夹带的背景人声部分。
+  final bgTranslations = <(String?, String)>[];
+  final bgRomanizations = <(String?, String)>[];
+  _Content? background;
+
+  String get plainText => TtmlParser._collapse(full.toString()).trim();
+
+  static _Content read(_XmlElement el) {
+    final c = _Content(
+      TtmlParser.parseTime(el.attr('begin')),
+      TtmlParser.parseTime(el.attr('end')),
+    );
+    c._children(el);
+    if (c.words.isNotEmpty) {
+      c.words.first.text = c.words.first.text.trimLeft();
+      c.words.last.text = c.words.last.text.trimRight();
+    }
+    return c;
+  }
+
+  void _children(_XmlElement el) {
+    for (final child in el.children) {
+      if (child is String) {
+        _textNode(child);
+      } else {
+        _element(child as _XmlElement);
+      }
+    }
+  }
+
+  void _textNode(String raw) {
+    // 带换行的纯空白是排版缩进，不是歌词内容。
+    if (raw.contains('\n') && raw.trim().isEmpty) return;
+    final t = TtmlParser._collapse(raw);
+    full.write(t);
+    if (t.trim().isEmpty) {
+      _markSpace();
+    } else if (words.isNotEmpty) {
+      // 逐字行里夹着未计时的文字：并进前一个字，避免丢字。
+      words.last.text += t;
+    }
+  }
+
+  void _markSpace() {
+    if (words.isNotEmpty && !words.last.text.endsWith(' ')) words.last.text += ' ';
+  }
+
+  void _element(_XmlElement el) {
+    if (el.attr('ruby') == 'container') {
+      _ruby(el);
+      return;
+    }
+    switch (el.attr('role')) {
+      case 'x-bg':
+        background = read(el);
+      case 'x-translation':
+        final sub = read(el);
+        translations.add((el.attr('lang'), sub.plainText));
+        if (sub.background case final bg?) {
+          bgTranslations.add((el.attr('lang'), bg.plainText));
+        }
+      case 'x-roman':
+        final sub = read(el);
+        romanizations.add((el.attr('lang'), sub.plainText));
+        if (sub.background case final bg?) {
+          bgRomanizations.add((el.attr('lang'), bg.plainText));
+        }
+      default:
+        final begin = TtmlParser.parseTime(el.attr('begin'));
+        final end = TtmlParser.parseTime(el.attr('end'));
+        if (begin == null || end == null || el.name != 'span') {
+          // 未计时的包装元素：内容照常读，里面可能还有计时 span。
+          _children(el);
+          return;
+        }
+        final raw = el.text;
+        final formatting = raw.contains('\n');
+        final t = TtmlParser._collapse(raw);
+        full.write(formatting ? t.trim() : t);
+        final clean = t.trim();
+        if (!formatting && t.startsWith(' ')) _markSpace();
+        if (clean.isEmpty) return;
+        words.add(_Word(begin, end, !formatting && t.endsWith(' ') ? '$clean ' : clean));
+    }
+  }
+
+  void _ruby(_XmlElement container) {
+    var base = '';
+    final rubies = <String>[];
+    int? start;
+    int? end;
+    for (final c in container.children.whereType<_XmlElement>()) {
+      switch (c.attr('ruby')) {
+        case 'base':
+          base = TtmlParser._collapse(c.text);
+        case 'textContainer':
+          for (final r in c.children.whereType<_XmlElement>()) {
+            if (r.attr('ruby') != 'text') continue;
+            final text = TtmlParser._collapse(r.text).trim();
+            if (text.isEmpty) continue;
+            rubies.add(text);
+            final b = TtmlParser.parseTime(r.attr('begin'));
+            final e = TtmlParser.parseTime(r.attr('end'));
+            if (b != null) start = start == null ? b : min(start, b);
+            if (e != null) end = end == null ? e : max(end, e);
+          }
+      }
+    }
+    final clean = base.trim();
+    if (clean.isEmpty) return;
+    full.write(base);
+    if (base.startsWith(' ')) _markSpace();
+    // 注音没有时间时，退回容器自己的时间。
+    start ??= TtmlParser.parseTime(container.attr('begin'));
+    end ??= TtmlParser.parseTime(container.attr('end'));
+    if (start == null || end == null) return;
+    words.add(
+      _Word(
+        start,
+        end,
+        base.endsWith(' ') ? '$clean ' : clean,
+        ruby: rubies.isEmpty ? null : rubies.join(),
+      ),
+    );
+  }
+
+  /// 转成一行。没有任何文字时返回 null。
+  _Line? toLine({
+    required int? begin,
+    required int? end,
+    required bool lineTiming,
+    required List<(String?, String)> translations,
+    required List<(String?, String)> romanizations,
+    bool stripParens = false,
+  }) {
+    final timed = !lineTiming && words.isNotEmpty;
+    List<_Word> out;
+    if (timed) {
+      out = [for (final w in words) _Word(w.start, w.end, w.text, ruby: w.ruby)];
+    } else {
+      final text = plainText;
+      final start = begin ?? (words.isEmpty ? null : words.map((w) => w.start).reduce(min));
+      if (text.isEmpty || start == null) return null;
+      final stop = end ?? (words.isEmpty ? null : words.map((w) => w.end).reduce(max));
+      out = [_Word(start, stop ?? start, text)];
+    }
+    if (stripParens) {
+      out.first.text = out.first.text.replaceFirst(RegExp(r'^[(（]+'), '').trimLeft();
+      out.last.text = out.last.text.replaceFirst(RegExp(r'[)）]+$'), '').trimRight();
+      out = out.where((w) => w.text.isNotEmpty).toList();
+      if (out.isEmpty) return null;
+    }
+    final start = timed ? (begin ?? out.map((w) => w.start).reduce(min)) : out.first.start;
+    final wordsEnd = out.map((w) => w.end).reduce(max);
+    final stop = timed ? max(end ?? 0, wordsEnd) : end;
+    return _Line(
+      start: min(start, out.first.start),
+      end: stop,
+      words: out,
+      timedWords: timed,
+      translation: TtmlParser.pickLanguage(translations),
+      romaji: TtmlParser.pickLanguage(romanizations),
+    );
+  }
 }
 
 class _Line {
-  const _Line(this.start, this.end, this.words, this.timedWords, this.translation, this.romaji);
+  const _Line({
+    required this.start,
+    required this.end,
+    required this.words,
+    required this.timedWords,
+    this.translation,
+    this.romaji,
+    this.duet = false,
+    this.background,
+  });
 
   final int start;
   final int? end;
@@ -210,6 +384,46 @@ class _Line {
   final bool timedWords;
   final String? translation;
   final String? romaji;
+  final bool duet;
+  final _Line? background;
+
+  _Line withExtras({required bool duet, _Line? background}) {
+    // 背景人声可能比主歌词早开始、晚结束：整行范围要把它包进来。
+    final bgEnd = background?.end ?? background?.words.map((w) => w.end).reduce(max);
+    return _Line(
+      start: background == null ? start : min(start, background.start),
+      end: end == null ? null : (bgEnd == null ? end : max(end!, bgEnd)),
+      words: words,
+      timedWords: timedWords,
+      translation: translation,
+      romaji: romaji,
+      duet: duet,
+      background: background,
+    );
+  }
+
+  LyricLine build(int fallbackEnd) {
+    final stop = max(end ?? fallbackEnd, start + 1);
+    final ws = timedWords ? words : [_Word(start, stop, words.single.text)];
+    return LyricLine(
+      start: TtmlParser._ms(start),
+      end: TtmlParser._ms(stop),
+      words: [
+        for (final w in ws)
+          if (w.text.isNotEmpty)
+            LyricWord(
+              w.text,
+              TtmlParser._ms(w.start),
+              TtmlParser._ms(max(w.end, w.start)),
+              ruby: w.ruby,
+            ),
+      ],
+      translation: translation,
+      romaji: romaji,
+      duet: duet,
+      background: background?.build(stop),
+    );
+  }
 }
 
 // ------------------------------------------------------------------ 极简 XML 读取

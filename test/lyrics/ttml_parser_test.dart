@@ -41,7 +41,7 @@ void main() {
   });
 
   group('TtmlParser.parse', () {
-    test('AMLL 逐字歌词：词间空格、实体、翻译、罗马音；丢弃背景人声', () {
+    test('AMLL 逐字歌词：词间空格、实体、翻译、罗马音、背景人声', () {
       final l = TtmlParser.parse(_amll, source: LyricSource.amll);
       expect(l.source, LyricSource.amll);
       expect(l.wordSynced, isTrue);
@@ -61,7 +61,78 @@ void main() {
       expect(second.text, '星空');
       expect(second.romaji, 'hoshizora');
       expect(second.translation, isNull);
+      // 背景人声比主歌词早开始：整行从背景人声开始算。
       expect(second.start, const Duration(milliseconds: 63195));
+      final bg = second.background!;
+      expect(bg.text, '見', reason: '首尾括号去掉');
+      expect(bg.words.single.start, const Duration(milliseconds: 63195));
+      expect(bg.translation, '背景');
+      expect(first.background, isNull);
+    });
+
+    test('对唱按 AMLL 规则左右交替，合唱不算', () {
+      const ttml =
+          '<tt xmlns:ttm="m"><head><metadata>'
+          '<ttm:agent type="person" xml:id="v1"/><ttm:agent type="person" xml:id="v2"/>'
+          '<ttm:agent type="group" xml:id="v1000"/></metadata></head><body><div>'
+          '<p begin="1" end="2" ttm:agent="v1"><span begin="1" end="2">A</span></p>'
+          '<p begin="3" end="4" ttm:agent="v2"><span begin="3" end="4">B</span></p>'
+          '<p begin="5" end="6" ttm:agent="v1000"><span begin="5" end="6">C</span></p>'
+          '<p begin="7" end="8" ttm:agent="v2"><span begin="7" end="8">D</span></p>'
+          '<p begin="9" end="10" ttm:agent="v1"><span begin="9" end="10">E</span></p>'
+          '<p begin="11" end="12"><span begin="11" end="12">F</span></p>'
+          '</div></body></tt>';
+      final l = TtmlParser.parse(ttml, source: LyricSource.amll);
+      expect(l.lines.map((x) => x.duet), [false, true, false, true, false, false]);
+    });
+
+    test('Ruby 注音、多语言翻译优先中文、head 里逐字音译和背景人声', () {
+      const ttml = '''<tt xmlns:tts="s" xmlns:ttm="m" xmlns:itunes="i" itunes:timing="Word">
+<head><metadata><iTunesMetadata>
+  <translations>
+    <translation xml:lang="en"><text for="L1">So</text></translation>
+    <translation xml:lang="zh-Hans"><text for="L1">所以 <span ttm:role="x-bg">(背景)</span></text></translation>
+  </translations>
+  <transliterations>
+    <transliteration xml:lang="ja-Latn"><text for="L1">
+      <span begin="1" end="1.5">sho</span><span begin="1.5" end="2">sen </span>
+      <span ttm:role="x-bg"><span begin="2" end="3">(haikei)</span></span>
+    </text></transliteration>
+  </transliterations>
+</iTunesMetadata></metadata></head>
+<body><div>
+  <p begin="1" end="3" itunes:key="L1">
+    <span tts:ruby="container"><span tts:ruby="base">所</span><span tts:ruby="textContainer"><span tts:ruby="text" begin="1" end="1.5">しょ</span></span></span><span tts:ruby="container"><span tts:ruby="base">詮</span><span tts:ruby="textContainer"><span tts:ruby="text" begin="1.5" end="1.7">せ</span><span tts:ruby="text" begin="1.7" end="2">ん</span></span></span>
+    <span ttm:role="x-bg" begin="2" end="3"><span begin="2" end="3">（背景）</span></span>
+  </p>
+</div></body></tt>''';
+      final line = TtmlParser.parse(ttml, source: LyricSource.amll).lines.single;
+      expect(line.text, '所詮');
+      expect(line.words.map((w) => w.ruby), ['しょ', 'せん']);
+      expect(line.words[1].start, const Duration(milliseconds: 1500));
+      expect(line.words[1].end, const Duration(milliseconds: 2000));
+      expect(line.translation, '所以');
+      expect(line.romaji, 'shosen');
+      expect(line.background!.text, '背景');
+      expect(line.background!.translation, '(背景)');
+      expect(line.background!.romaji, '(haikei)');
+    });
+
+    test('itunes:timing="Line" 时忽略 span 的逐字时间', () {
+      const ttml =
+          '<tt itunes:timing="Line"><body><div>'
+          '<p begin="1" end="3"><span begin="1" end="2">Hello</span> <span begin="2" end="3">world</span></p>'
+          '</div></body></tt>';
+      final l = TtmlParser.parse(ttml, source: LyricSource.amll);
+      expect(l.wordSynced, isFalse);
+      expect(l.lines.single.words.single.text, 'Hello world');
+    });
+
+    test('pickLanguage', () {
+      expect(TtmlParser.pickLanguage([('en', 'a'), ('zh-Hant', 'b'), ('zh-CN', 'c')]), 'c');
+      expect(TtmlParser.pickLanguage([('en', 'a'), ('zh-Hant', 'b')]), 'b');
+      expect(TtmlParser.pickLanguage([(null, ' '), ('en', 'a')]), 'a');
+      expect(TtmlParser.pickLanguage([]), isNull);
     });
 
     test('逐行 TTML 和 head 里的 Apple 式翻译', () {

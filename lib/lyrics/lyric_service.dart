@@ -39,10 +39,32 @@ class LyricService {
     final lyrics = switch (source) {
       LyricSource.netease => await _fromNetease(song),
       LyricSource.qq => await _qq.fetch(song),
-      LyricSource.amll => await _amll.fetch(song),
+      LyricSource.amll => await _withNeteaseRomaji(song, await _amll.fetch(song)),
     };
     _cache[key] = lyrics;
     return lyrics;
+  }
+
+  /// AMLL 歌词自己没有罗马音时，从网易云拉取罗马音，按时间挂到最近的行上。
+  /// 不在本地生成罗马音。网易云取不到时保持原样。
+  Future<Lyrics> _withNeteaseRomaji(Song song, Lyrics lyrics) async {
+    if (lyrics.isEmpty || lyrics.hasRomaji) return lyrics;
+    final Lyrics netease;
+    try {
+      netease = await _fetchFrom(song, LyricSource.netease);
+    } catch (_) {
+      return lyrics;
+    }
+    final romaji = [
+      for (final l in netease.lines)
+        if (l.romaji case final r?) (l.start, r),
+    ];
+    if (romaji.isEmpty) return lyrics;
+    return Lyrics(
+      lines: LyricParser.attachByTime(lyrics.lines, romaji, (l, r) => l.copyWith(romaji: r)),
+      source: lyrics.source,
+      wordSynced: lyrics.wordSynced,
+    );
   }
 
   Future<Lyrics> _fromNetease(Song song) async {
