@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app.dart';
+import '../../data/models.dart';
 import '../../state/account_controller.dart';
 import '../library/track_list_view.dart';
 import '../login_page.dart';
@@ -13,10 +14,18 @@ class RecentPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final account = AccountScope.of(context);
     if (!account.isLoggedIn) return const LoginPrompt(message: '登录后查看最近播放');
-    final api = AppScope.of(context).api;
+    final services = AppScope.of(context);
+    final uid = account.profile!.userId;
     return TrackListView(
-      reloadKey: account.profile!.userId,
-      load: api.recentSongs,
+      reloadKey: uid,
+      // 先显示上次的记录，后台再取最新的。
+      watch: (force) => services.data.watch(
+        'recent_$uid',
+        fetch: services.api.recentSongs,
+        encode: (songs) => [for (final s in songs) s.toJson()],
+        decode: (j) => j is List ? [for (final s in j) ?Song.fromJson(s)] : null,
+        force: force,
+      ),
       queueTitle: '最近播放',
       emptyText: '还没有播放记录',
       header: (context, tracks, playAll) => CollectionHeader(

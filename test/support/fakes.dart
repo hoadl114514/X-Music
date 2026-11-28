@@ -4,6 +4,8 @@ import 'package:flutter/painting.dart';
 import 'package:netease_client/api/netease_api.dart';
 import 'package:netease_client/app/services.dart';
 import 'package:netease_client/audio/audio_cache.dart';
+import 'package:netease_client/audio/listen_cache.dart';
+import 'package:netease_client/data/track_cache.dart';
 import 'package:netease_client/audio/audio_engine.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/state/account_controller.dart';
@@ -109,6 +111,12 @@ class FakeBackend implements PlaybackBackend {
   /// 这些歌只能试听。
   final trials = <String, ({Duration start, Duration end})>{};
   final lyricsMap = <(String, LyricSource), Lyrics>{};
+
+  /// 每次取歌词的参数：来源、是否自动换源、换源顺序。
+  final lyricRequests = <(LyricSource, bool, List<LyricSource>?)>[];
+
+  /// 设置后，取歌词先等它返回的 Future（模拟慢请求）。
+  Future<void> Function(LyricSource source)? lyricsGate;
   final urlRequests = <(String, AudioQuality)>[];
   final scrobbles = <({String id, Duration listened, String? sourceId})>[];
   final starts = <String>[];
@@ -136,6 +144,12 @@ class FakeBackend implements PlaybackBackend {
       QualityInfo(quality: q, bitrate: 320000, size: 1 << 20),
   ];
 
+  /// 地址 → 位深，模拟读 FLAC 文件头。
+  final bitDepths = <String, int>{};
+
+  @override
+  Future<int?> bitDepth(String url) async => bitDepths[url];
+
   @override
   Future<SongUrl?> songUrl(String songId, AudioQuality quality) async {
     urlRequests.add((songId, quality));
@@ -155,9 +169,19 @@ class FakeBackend implements PlaybackBackend {
   }
 
   @override
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback}) async {
-    final order = [source, if (fallback) ...LyricSource.values.where((s) => s != source)];
-    for (final s in order) {
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) async {
+    lyricRequests.add((source, fallback, order));
+    if (lyricsGate case final gate?) await gate(source);
+    final tries = [
+      source,
+      if (fallback) ...(order ?? LyricSource.values).where((s) => s != source),
+    ];
+    for (final s in tries) {
       if (lyricsMap[(song.id, s)] case final l?) return l;
     }
     return Lyrics.empty;
@@ -212,13 +236,20 @@ Future<({AppServices services, FakeEngine engine, FakeBackend backend})> fakeSer
   );
   final engine = FakeEngine();
   final backend = FakeBackend();
+  // 数据缓存只存内存；歌曲缓存没有目录：设置页能显示缓存选项，但不读写文件。
+  final data = DataCache();
+  final audioCache = AudioCache(
+    directory: Future.value(null),
+    limit: () => settings.audioCacheLimit,
+  );
   final services = AppServices(
     settings: settings,
     api: api,
-    account: AccountController(api: api, settings: settings),
-    player: PlayerController(engine: engine, backend: backend, settings: settings),
-    // 没有目录：设置页能显示缓存选项，但不读写文件。
-    audioCache: AudioCache(directory: Future.value(null), limit: () => settings.audioCacheLimit),
+    account: AccountController(api: api, settings: settings, data: data),
+    player: PlayerController(engine: engine, backend: backend, settings: settings, data: data),
+    audioCache: audioCache,
+    data: data,
+    listenCache: ListenCache(data: data)..audio = audioCache,
   );
   return (services: services, engine: engine, backend: backend);
 }

@@ -22,8 +22,11 @@ class AppSettings extends ChangeNotifier {
   static const _kFmMode = 'fm_mode';
   static const _kQuality = 'preferred_quality';
   static const _kLyricSource = 'lyric_source';
+  static const _kLyricSourceOrder = 'lyric_source_order';
+  static const _kLyricSourceOff = 'lyric_source_disabled';
   static const _kTranslation = 'show_translation';
   static const _kRomaji = 'show_romaji';
+  static const _kObsceneMask = 'lyric_obscene_mask';
   static const _kSearchHistory = 'search_history';
   static const _kSyncRecent = 'sync_recent_plays';
   static const _kPlayMode = 'play_mode';
@@ -103,16 +106,63 @@ class AppSettings extends ChangeNotifier {
   bool get usbExclusive => _prefs.getBool(_kUsbExclusive) ?? false;
   set usbExclusive(bool v) => _set(() => _prefs.setBool(_kUsbExclusive, v));
 
-  /// 默认歌词来源。取不到时自动换另一个来源。
-  LyricSource get lyricSource =>
-      LyricSource.byName(_prefs.getString(_kLyricSource)) ?? LyricSource.netease;
-  set lyricSource(LyricSource v) => _set(() => _prefs.setString(_kLyricSource, v.name));
+  /// 默认的取歌词顺序。AMLL 按网易云 id 精确对应，排在要搜索匹配的 QQ 前面。
+  static const defaultLyricSourceOrder = [LyricSource.netease, LyricSource.amll, LyricSource.qq];
+
+  /// 所有歌词来源，按用户排的先后顺序（含已关闭的）。
+  /// 没排过时用默认顺序，旧版设置的「默认歌词来源」放在最前。
+  List<LyricSource> get lyricSourceOrder {
+    final saved = [
+      for (final n in _prefs.getStringList(_kLyricSourceOrder) ?? const <String>[])
+        ?LyricSource.byName(n),
+    ];
+    final legacy = LyricSource.byName(_prefs.getString(_kLyricSource));
+    final base = saved.isNotEmpty ? saved : [?legacy, ...defaultLyricSourceOrder];
+    // 去重，并把新加的来源补到最后。
+    return {...base, ...defaultLyricSourceOrder, ...LyricSource.values}.toList();
+  }
+
+  set lyricSourceOrder(List<LyricSource> v) =>
+      _set(() => _prefs.setStringList(_kLyricSourceOrder, [for (final s in v) s.name]));
+
+  /// 关闭的歌词来源：自动获取时跳过，但在播放页仍可手动切换。
+  Set<LyricSource> get disabledLyricSources => {
+    for (final n in _prefs.getStringList(_kLyricSourceOff) ?? const <String>[])
+      ?LyricSource.byName(n),
+  };
+
+  /// 打开或关闭一个来源。至少保留一个打开的来源，关闭最后一个时不生效。
+  void setLyricSourceEnabled(LyricSource s, bool enabled) {
+    final off = disabledLyricSources;
+    if (enabled) {
+      off.remove(s);
+    } else {
+      if (lyricSourceOrder.where((x) => !off.contains(x) && x != s).isEmpty) return;
+      off.add(s);
+    }
+    _set(() => _prefs.setStringList(_kLyricSourceOff, [for (final x in off) x.name]));
+  }
+
+  /// 自动获取歌词时依次尝试的来源：按顺序，去掉关闭的。
+  List<LyricSource> get lyricSources {
+    final off = disabledLyricSources;
+    final on = lyricSourceOrder.where((s) => !off.contains(s)).toList();
+    return on.isEmpty ? [lyricSourceOrder.first] : on;
+  }
+
+  /// 最优先的歌词来源。
+  LyricSource get lyricSource => lyricSources.first;
 
   bool get showTranslation => _prefs.getBool(_kTranslation) ?? true;
   set showTranslation(bool v) => _set(() => _prefs.setBool(_kTranslation, v));
 
   bool get showRomaji => _prefs.getBool(_kRomaji) ?? true;
   set showRomaji(bool v) => _set(() => _prefs.setBool(_kRomaji, v));
+
+  /// 歌词里标为不雅用语的词怎么显示。默认不屏蔽，和 AMLL 一致。
+  ObsceneMask get obsceneMask =>
+      ObsceneMask.values.asNameMap()[_prefs.getString(_kObsceneMask)] ?? ObsceneMask.off;
+  set obsceneMask(ObsceneMask v) => _set(() => _prefs.setString(_kObsceneMask, v.name));
 
   /// 搜索历史，最近的在前。
   List<String> get searchHistory => _prefs.getStringList(_kSearchHistory) ?? const [];

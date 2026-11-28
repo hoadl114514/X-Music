@@ -79,8 +79,8 @@ void main() {
     expect(find.text('输出通道'), findsOneWidget);
     expect(find.text('输出位深'), findsOneWidget);
     expect(find.text('输出采样率'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('默认歌词来源'), -200);
-    expect(find.text('默认歌词来源'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('歌词来源'), -200);
+    expect(find.text('按顺序获取：网易云 → AMLL → QQ 音乐'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('登录账号'), -200);
     await tester.tap(find.text('登录账号'));
     await settle(tester);
@@ -98,9 +98,9 @@ void main() {
     await settle(tester);
     await tester.tap(find.text('设置'));
     await settle(tester);
-    await tester.scrollUntilVisible(find.text('听歌缓存上限'), 200);
+    await tester.scrollUntilVisible(find.text('关于'), 200);
     expect(find.text('5 GB'), findsOneWidget);
-    expect(find.text('已用 0 B'), findsOneWidget);
+    expect(find.text('已用 0 B（歌曲 0 B · 图片 0 B · 数据 0 B）'), findsOneWidget);
 
     await tester.tap(find.text('听歌缓存上限'));
     await settle(tester);
@@ -165,6 +165,7 @@ void main() {
     await settle(tester);
     expect(find.text('歌词来源'), findsOneWidget);
     expect(find.textContaining('网易云 · 逐字 · 翻译'), findsOneWidget);
+    expect(find.text('AMLL'), findsOneWidget);
     await tester.tap(find.byTooltip('歌词提前 0.5s'));
     await tester.pump();
     expect(find.text('+0.5s'), findsOneWidget);

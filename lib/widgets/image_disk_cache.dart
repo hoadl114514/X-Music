@@ -91,6 +91,37 @@ abstract final class ImageDiskCache {
     } catch (_) {}
   }
 
+  /// 占用的字节数。
+  static Future<int> usedBytes() async {
+    if (memory case final m?) return m.values.fold<int>(0, (sum, b) => sum + b.length);
+    try {
+      final dir = await _directory();
+      if (dir == null) return 0;
+      var total = 0;
+      await for (final e in dir.list()) {
+        if (e is File) total += await e.length();
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 全部删掉（清空听歌缓存时用）。
+  static Future<void> clear() async {
+    if (memory case final m?) {
+      m.clear();
+      return;
+    }
+    try {
+      final dir = await _directory();
+      if (dir == null) return;
+      await for (final e in dir.list()) {
+        if (e is File) await e.delete();
+      }
+    } catch (_) {}
+  }
+
   /// 超过 [limit] 时从最久没用的开始删。
   static Future<void> prune({int limit = maxBytes}) async {
     try {

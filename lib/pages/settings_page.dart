@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app/app.dart';
 import '../app/app_info.dart';
 import '../audio/audio_cache.dart';
 import '../audio/audio_output.dart';
+import '../audio/listen_cache.dart';
 import '../audio/system_media.dart';
 import '../data/format.dart';
 import '../data/models.dart';
@@ -12,6 +15,7 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/share.dart';
 import 'login_page.dart';
+import 'lyric_sources_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -79,16 +83,10 @@ class SettingsPage extends StatelessWidget {
           const _Header('歌词'),
           ListTile(
             leading: const Icon(Icons.lyrics_outlined),
-            title: const Text('默认歌词来源'),
-            subtitle: const Text('没有歌词时自动尝试另一个来源'),
-            trailing: SegmentedButton<LyricSource>(
-              segments: [
-                for (final s in LyricSource.values) ButtonSegment(value: s, label: Text(s.label)),
-              ],
-              selected: {settings.lyricSource},
-              showSelectedIcon: false,
-              onSelectionChanged: (v) => settings.lyricSource = v.first,
-            ),
+            title: const Text('歌词来源'),
+            subtitle: Text('按顺序获取：${LyricSourcesPage.summary(settings.lyricSources)}'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => LyricSourcesPage.open(context),
           ),
           SwitchListTile(
             secondary: const Icon(Icons.translate_rounded),
@@ -102,6 +100,22 @@ class SettingsPage extends StatelessWidget {
             value: settings.showRomaji,
             onChanged: (v) => settings.showRomaji = v,
           ),
+          ListTile(
+            leading: const Icon(Icons.visibility_off_outlined),
+            title: const Text('屏蔽不雅用语'),
+            subtitle: const Text('只对标了不雅用语的歌词生效（AMLL 歌词）'),
+            trailing: DropdownButton<ObsceneMask>(
+              value: settings.obsceneMask,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final m in ObsceneMask.values)
+                  DropdownMenuItem(value: m, child: Text(m.label)),
+              ],
+              onChanged: (v) {
+                if (v != null) settings.obsceneMask = v;
+              },
+            ),
+          ),
           SwitchListTile(
             secondary: const Icon(Icons.history_rounded),
             title: const Text('同步最近播放到网易云'),
@@ -109,7 +123,7 @@ class SettingsPage extends StatelessWidget {
             value: settings.syncRecentPlays,
             onChanged: (v) => settings.syncRecentPlays = v,
           ),
-          if (AppScope.of(context).audioCache case final cache?) ...[
+          if (AppScope.of(context).listenCache case final cache?) ...[
             const _Header('缓存'),
             _AudioCacheTiles(cache),
           ],
@@ -323,19 +337,32 @@ class _NotificationTileState extends State<_NotificationTile> with WidgetsBindin
   }
 }
 
-/// 听歌缓存：上限、占用、清空。
-class _AudioCacheTiles extends StatelessWidget {
+/// 听歌缓存：上限、占用、清空。歌曲、图片和数据（歌单、歌词、列表）合在一起算。
+class _AudioCacheTiles extends StatefulWidget {
   const _AudioCacheTiles(this.cache);
 
-  final AudioCache cache;
+  final ListenCache cache;
 
+  @override
+  State<_AudioCacheTiles> createState() => _AudioCacheTilesState();
+}
+
+class _AudioCacheTilesState extends State<_AudioCacheTiles> {
   static const _presets = [1 << 30, 2 << 30, 5 << 30, 10 << 30, 20 << 30];
+
+  ListenCache get cache => widget.cache;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(cache.refresh());
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = AppScope.of(context).settings;
     return ListenableBuilder(
-      listenable: cache,
+      listenable: Listenable.merge([cache, ?cache.audio]),
       builder: (context, _) {
         final limit = settings.audioCacheLimit;
         final used = cache.usedBytes;
@@ -344,14 +371,19 @@ class _AudioCacheTiles extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.sd_storage_outlined),
               title: const Text('听歌缓存上限'),
-              subtitle: Text(limit <= 0 ? '已关闭：听歌不保存到本机' : '听过的歌存在本机，再听不耗流量；超出后先删最久没听的'),
+              subtitle: Text(
+                limit <= 0 ? '已关闭：歌曲不保存到本机，歌词和列表照常缓存' : '歌曲、图片、歌词和列表都存在本机，打开更快、少耗流量；超出后先删最久没听的歌',
+              ),
               trailing: Text(limit <= 0 ? '关闭' : formatBytes(limit)),
               onTap: () => _pickLimit(context, limit),
             ),
             ListTile(
               leading: const Icon(Icons.delete_sweep_outlined),
               title: const Text('清空听歌缓存'),
-              subtitle: Text('已用 ${formatBytes(used)}'),
+              subtitle: Text(
+                '已用 ${formatBytes(used)}（歌曲 ${formatBytes(cache.audioBytes)} · '
+                '图片 ${formatBytes(cache.imageBytes)} · 数据 ${formatBytes(cache.dataBytes)}）',
+              ),
               enabled: used > 0,
               onTap: () => _confirmClear(context, used),
             ),
@@ -391,7 +423,8 @@ class _AudioCacheTiles extends StatelessWidget {
     );
     if (picked == null) return;
     settings.audioCacheLimit = picked;
-    await cache.prune();
+    await cache.refresh();
+    await cache.audio?.prune();
   }
 
   /// 输入以 GB 为单位的上限，允许小数。
@@ -441,7 +474,7 @@ class _AudioCacheTiles extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空听歌缓存？'),
-        content: Text('将删除 ${formatBytes(used)} 已缓存的歌曲，之后再听需要重新下载。'),
+        content: Text('将删除 ${formatBytes(used)} 已缓存的歌曲、图片、歌词和列表，之后需要重新下载。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('清空')),

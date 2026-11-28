@@ -176,6 +176,47 @@ class Playlist {
         );
 }
 
+extension PlaylistJson on Playlist {
+  /// 存本地缓存用。封面主色不存。
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'plays': playCount,
+    'tracks': trackCount,
+    'cover': ?coverUrl,
+    'creator': ?creator,
+    'creatorId': ?creatorId,
+    'desc': ?description,
+    if (subscribed) 'sub': true,
+    if (isLikedList) 'liked': true,
+    if (shared) 'shared': true,
+    if (sharedUsers.isNotEmpty) 'users': [for (final u in sharedUsers) u.toJson()],
+  };
+
+  /// [toJson] 的逆操作；格式不对时返回 null。
+  static Playlist? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! String || name is! String) return null;
+    return Playlist(
+      id: id,
+      name: name,
+      playCount: json['plays'] as int? ?? 0,
+      trackCount: json['tracks'] as int? ?? 0,
+      coverUrl: json['cover'] as String?,
+      creator: json['creator'] as String?,
+      creatorId: json['creatorId'] as int?,
+      description: json['desc'] as String?,
+      subscribed: json['sub'] == true,
+      isLikedList: json['liked'] == true,
+      shared: json['shared'] == true,
+      sharedUsers: [
+        for (final u in json['users'] as List? ?? const []) ?SocialUserJson.fromJson(u),
+      ],
+    );
+  }
+}
+
 class ArtistRef {
   const ArtistRef(this.id, this.name);
 
@@ -292,6 +333,25 @@ class UserProfile {
 
   /// 0 为普通用户，其他值为各类会员。
   final int vipType;
+
+  Map<String, Object?> toJson() => {
+    'id': userId,
+    'name': nickname,
+    'avatar': ?avatarUrl,
+    'vip': vipType,
+  };
+
+  static UserProfile? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! int || name is! String) return null;
+    return UserProfile(
+      userId: id,
+      nickname: name,
+      avatarUrl: json['avatar'] as String?,
+      vipType: json['vip'] as int? ?? 0,
+    );
+  }
 }
 
 /// 网易云的音质档位，从低到高排列；[index] 越大越好。
@@ -350,6 +410,25 @@ class QualityInfo {
   /// 字节。
   final int size;
   final int? sampleRate;
+
+  Map<String, Object?> toJson() => {
+    'q': quality.level,
+    'br': bitrate,
+    'size': size,
+    'sr': ?sampleRate,
+  };
+
+  static QualityInfo? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final q = AudioQuality.fromLevel(json['q'] as String?);
+    if (q == null) return null;
+    return QualityInfo(
+      quality: q,
+      bitrate: json['br'] as int? ?? 0,
+      size: json['size'] as int? ?? 0,
+      sampleRate: json['sr'] as int?,
+    );
+  }
 }
 
 /// 取到的播放地址。[quality] 是服务端实际给的档位，可能低于请求的档位（版权或会员限制）。
@@ -365,11 +444,44 @@ class SongUrl {
 
 /// 逐字歌词里的一个"字"（实际上可以是一个词或一个音节）。
 class LyricWord {
-  const LyricWord(this.text, this.start, this.end);
+  const LyricWord(
+    this.text,
+    this.start,
+    this.end, {
+    this.ruby,
+    this.obscene = false,
+    this.emptyBeat = 0,
+  });
 
   final String text;
   final Duration start;
   final Duration end;
+
+  /// 注音（日语振假名、拼音等），显示在字的上方。只有 TTML 歌词会有。
+  final String? ruby;
+
+  /// 不雅用语（TTML 的 `amll:obscene`），按设置屏蔽显示。
+  final bool obscene;
+
+  /// 空拍数（TTML 的 `amll:empty-beat`）。AMLL 打轴工具的标记，播放时不影响显示，保留下来。
+  final int emptyBeat;
+
+  /// 按 [mode] 屏蔽后要显示的文字。不是不雅用语或不屏蔽时原样返回。
+  String display(ObsceneMask mode) {
+    if (!obscene || mode == ObsceneMask.off) return text;
+    final trailing = text.length - text.trimRight().length;
+    final core = text.trimRight();
+    final chars = [for (final r in core.runes) String.fromCharCode(r)];
+    final String masked;
+    if (mode == ObsceneMask.full || chars.length <= 2) {
+      masked = mode == ObsceneMask.full || chars.length <= 1
+          ? '*' * chars.length
+          : '${chars.first}*';
+    } else {
+      masked = '${chars.first}${'*' * (chars.length - 2)}${chars.last}';
+    }
+    return masked + ' ' * trailing;
+  }
 
   /// 在 [position] 时该字已唱出的比例，0–1。
   double progressAt(Duration position) {
@@ -386,6 +498,9 @@ class LyricLine {
     required this.words,
     this.translation,
     this.romaji,
+    this.duet = false,
+    this.background,
+    this.songPart,
   });
 
   final Duration start;
@@ -396,6 +511,16 @@ class LyricLine {
   final String? translation;
   final String? romaji;
 
+  /// 对唱：由另一位歌手演唱，靠右显示。只有 TTML 歌词会有。
+  final bool duet;
+
+  /// 背景人声（和声），跟在主歌词下面、字号更小。只有 TTML 歌词会有。
+  /// 它自己的 [start]、[end] 不影响当前行的判断。
+  final LyricLine? background;
+
+  /// 所在的歌曲段落（TTML 的 `itunes:songPart`），如 `Verse`、`Chorus`。没标时为 null。
+  final String? songPart;
+
   String get text => words.map((w) => w.text).join();
 
   LyricLine copyWith({String? translation, String? romaji}) => LyricLine(
@@ -404,12 +529,27 @@ class LyricLine {
     words: words,
     translation: translation ?? this.translation,
     romaji: romaji ?? this.romaji,
+    duet: duet,
+    background: background,
+    songPart: songPart,
   );
+}
+
+/// 不雅用语（`amll:obscene`）怎么显示。
+enum ObsceneMask {
+  off('不屏蔽'),
+  partial('保留首尾'),
+  full('全部屏蔽');
+
+  const ObsceneMask(this.label);
+
+  final String label;
 }
 
 enum LyricSource {
   netease('网易云'),
-  qq('QQ 音乐');
+  qq('QQ 音乐'),
+  amll('AMLL');
 
   const LyricSource(this.label);
 
@@ -440,6 +580,81 @@ class Lyrics {
   bool get isEmpty => lines.isEmpty;
   bool get hasTranslation => lines.any((l) => l.translation != null);
   bool get hasRomaji => lines.any((l) => l.romaji != null);
+
+  /// 存本地缓存用。时间都用毫秒。
+  Map<String, Object?> toJson() => {
+    'src': ?source?.name,
+    'word': wordSynced,
+    'lines': [for (final l in lines) _lineJson(l)],
+  };
+
+  static Lyrics? fromJson(Object? json) {
+    if (json is! Map || json['lines'] is! List) return null;
+    final lines = <LyricLine>[];
+    for (final l in json['lines'] as List) {
+      final line = _lineFrom(l);
+      if (line == null) return null;
+      lines.add(line);
+    }
+    return Lyrics(
+      lines: lines,
+      source: LyricSource.byName(json['src'] as String?),
+      wordSynced: json['word'] == true,
+    );
+  }
+
+  static Map<String, Object?> _lineJson(LyricLine l) => {
+    's': l.start.inMilliseconds,
+    'e': l.end.inMilliseconds,
+    'w': [
+      for (final w in l.words)
+        [
+          w.text,
+          w.start.inMilliseconds,
+          w.end.inMilliseconds,
+          if (w.ruby != null || w.obscene || w.emptyBeat > 0) w.ruby,
+          if (w.obscene || w.emptyBeat > 0) w.obscene,
+          if (w.emptyBeat > 0) w.emptyBeat,
+        ],
+    ],
+    't': ?l.translation,
+    'r': ?l.romaji,
+    if (l.duet) 'd': true,
+    if (l.background case final bg?) 'bg': _lineJson(bg),
+    'part': ?l.songPart,
+  };
+
+  static LyricLine? _lineFrom(Object? json) {
+    if (json is! Map) return null;
+    final s = json['s'], e = json['e'], w = json['w'];
+    if (s is! int || e is! int || w is! List) return null;
+    final words = <LyricWord>[];
+    for (final x in w) {
+      if (x is! List || x.length < 3 || x[0] is! String || x[1] is! int || x[2] is! int) {
+        return null;
+      }
+      words.add(
+        LyricWord(
+          x[0] as String,
+          Duration(milliseconds: x[1] as int),
+          Duration(milliseconds: x[2] as int),
+          ruby: x.length > 3 ? x[3] as String? : null,
+          obscene: x.length > 4 && x[4] == true,
+          emptyBeat: x.length > 5 && x[5] is int ? x[5] as int : 0,
+        ),
+      );
+    }
+    return LyricLine(
+      start: Duration(milliseconds: s),
+      end: Duration(milliseconds: e),
+      words: words,
+      translation: json['t'] as String?,
+      romaji: json['r'] as String?,
+      duet: json['d'] == true,
+      background: json['bg'] == null ? null : _lineFrom(json['bg']),
+      songPart: json['part'] as String?,
+    );
+  }
 }
 
 /// 评论区属于哪类资源。网易云用 `前缀 + id` 作为评论区 id（threadId）。
@@ -594,6 +809,18 @@ class SocialUser {
     musician: musician,
     followeds: followeds,
   );
+}
+
+extension SocialUserJson on SocialUser {
+  /// 存本地缓存用，只存头像和名字这些显示用的信息。
+  Map<String, Object?> toJson() => {'id': userId, 'name': nickname, 'avatar': ?avatarUrl};
+
+  static SocialUser? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! int || name is! String) return null;
+    return SocialUser(userId: id, nickname: name, avatarUrl: json['avatar'] as String?);
+  }
 }
 
 /// 一页用户（关注 / 粉丝）。

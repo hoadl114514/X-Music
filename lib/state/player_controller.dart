@@ -7,8 +7,10 @@ import '../api/netease_api.dart';
 import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
 import '../audio/audio_output.dart';
+import '../audio/flac_probe.dart';
 import '../data/models.dart';
 import '../data/retry.dart';
+import '../data/track_cache.dart';
 import '../lyrics/lyric_service.dart';
 import '../widgets/cover_palette.dart';
 import 'settings.dart';
@@ -17,7 +19,17 @@ import 'settings.dart';
 abstract class PlaybackBackend {
   Future<List<QualityInfo>> qualities(String songId);
   Future<SongUrl?> songUrl(String songId, AudioQuality quality);
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback});
+
+  /// 读 [url] 指向的音频文件的位深（bit）。读不到或不是 FLAC 时返回 null。
+  Future<int?> bitDepth(String url);
+
+  /// 取 [source] 的歌词；[fallback] 时没有就按 [order]（不给时用默认顺序）换其他来源。
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  });
 
   /// 开始放一首歌：同步到网易云的「最近播放」。未登录时什么都不做。
   Future<void> startPlay(Song song, {String? sourceId});
@@ -27,10 +39,14 @@ abstract class PlaybackBackend {
 }
 
 class NeteaseBackend implements PlaybackBackend {
-  NeteaseBackend(this._api, this._lyrics);
+  NeteaseBackend(this._api, this._lyrics, {FlacProbe? probe}) : _probe = probe ?? FlacProbe();
 
   final NeteaseApi _api;
   final LyricService _lyrics;
+  final FlacProbe _probe;
+
+  @override
+  Future<int?> bitDepth(String url) => _probe.bitDepth(url);
 
   @override
   Future<List<QualityInfo>> qualities(String songId) => _api.qualities(songId);
@@ -39,8 +55,12 @@ class NeteaseBackend implements PlaybackBackend {
   Future<SongUrl?> songUrl(String songId, AudioQuality quality) => _api.songUrl(songId, quality);
 
   @override
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback}) =>
-      _lyrics.fetch(song, source, fallback: fallback);
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) => _lyrics.fetch(song, source, fallback: fallback, order: order);
 
   @override
   Future<void> startPlay(Song song, {String? sourceId}) async {
@@ -77,6 +97,7 @@ class PlayerController extends ChangeNotifier {
     required this._backend,
     required this._settings,
     this.cache,
+    this.data,
     this.output,
     this.retryDelays = defaultRetryDelays,
   }) {
@@ -90,6 +111,27 @@ class PlayerController extends ChangeNotifier {
 
   /// 听歌缓存。为 null 时不缓存（测试）。
   final AudioCache? cache;
+
+  /// 音质列表、位深的本地缓存（也算在听歌缓存里）。为 null 时不缓存。
+  final DataCache? data;
+
+  /// 取音质列表：有缓存先用缓存，同时后台取最新的写回缓存。
+  Future<List<QualityInfo>> _fetchQualities(String songId) async {
+    final data = this.data;
+    final key = 'q_$songId';
+    List<QualityInfo>? decode(Object? j) =>
+        j is List ? [for (final x in j) ?QualityInfo.fromJson(x)] : null;
+    Future<List<QualityInfo>> fetch() async {
+      final q = await _backend.qualities(songId);
+      if (q.isNotEmpty) unawaited(data?.write(key, [for (final x in q) x.toJson()]));
+      return q;
+    }
+
+    final cached = await data?.read(key, decode);
+    if (cached == null || cached.isEmpty) return fetch();
+    unawaited(fetch().then((_) {}, onError: (Object _) {}));
+    return cached;
+  }
 
   /// 音频输出和网络类型的原生接口。为 null 时不区分移动网络、不设置输出（测试可传假的）。
   final AudioOutput? output;
@@ -201,6 +243,9 @@ class PlayerController extends ChangeNotifier {
 
   Lyrics _lyrics = Lyrics.empty;
   bool _lyricsLoading = false;
+
+  /// 每次取歌词加一。慢的旧请求回来时不覆盖新请求的结果。
+  int _lyricsRequest = 0;
   List<Color>? _coverPalette;
 
   Timer? _timer;
@@ -284,6 +329,71 @@ class PlayerController extends ChangeNotifier {
   /// 这首歌提供的音质（从低到高）。取不到时为空。
   List<QualityInfo> get qualities => _qualities;
 
+  /// 当前这首歌各档音质的位深（bit），由 [probeBitDepths] 读出。
+  final _bitDepths = <(String, AudioQuality), int?>{};
+
+  /// 当前这首歌 [quality] 档的位深；还没读或读不到时为 null。
+  int? bitDepthOf(AudioQuality quality) {
+    final s = current;
+    return s == null ? null : _bitDepths[(s.id, quality)];
+  }
+
+  /// 可能是 FLAC 的档位：无损及以上，杜比除外。
+  static bool _maybeFlac(AudioQuality q) =>
+      q.index >= AudioQuality.lossless.index && q != AudioQuality.dolby;
+
+  /// 读当前这首歌各无损档的位深。打开音质列表时调用，每档只读一次。
+  ///
+  /// 网易云不给位深，需要先取该档地址，再读文件头。
+  /// 账号权益不够、服务端降了档时不显示，免得把低档的位深标到高档上。
+  Future<void> probeBitDepths() async {
+    final song = current;
+    if (song == null) return;
+    final todo = [
+      for (final info in _qualities)
+        if (_maybeFlac(info.quality) && !_bitDepths.containsKey((song.id, info.quality)))
+          info.quality,
+    ];
+    if (todo.isEmpty) return;
+    for (final q in todo) {
+      _bitDepths[(song.id, q)] = null;
+    }
+    final key = 'bits_${song.id}';
+    final saved =
+        await data?.read(key, (j) => j is Map ? j.cast<String, Object?>() : null) ?? const {};
+    final missing = <AudioQuality>[];
+    for (final q in todo) {
+      if (saved[q.level] case final int bits) {
+        _bitDepths[(song.id, q)] = bits;
+      } else {
+        missing.add(q);
+      }
+    }
+    if (missing.length < todo.length && current?.id == song.id) notifyListeners();
+    if (missing.isEmpty) return;
+    await Future.wait([
+      for (final q in missing)
+        () async {
+          try {
+            final url = await _backend.songUrl(song.id, q);
+            if (url == null || url.quality != q || url.trial != null) return;
+            final bits = await _backend.bitDepth(url.url);
+            if (bits == null) return;
+            _bitDepths[(song.id, q)] = bits;
+            if (current?.id == song.id) notifyListeners();
+          } catch (_) {
+            _bitDepths.remove((song.id, q)); // 出错了下次打开再试。
+          }
+        }(),
+    ]);
+    final found = {
+      ...saved,
+      for (final q in missing)
+        if (_bitDepths[(song.id, q)] case final int bits) q.level: bits,
+    };
+    if (found.length > saved.length) await data?.write(key, found);
+  }
+
   /// 实际在放的音质。
   AudioQuality? get quality => _quality;
 
@@ -319,6 +429,11 @@ class PlayerController extends ChangeNotifier {
 
   /// 用于歌词对齐的时间点：叠加偏移；试听片段换算回整首歌的时间。
   Duration get lyricPosition => _position + (_trial?.start ?? Duration.zero) + _lyricOffset;
+
+  /// 同 [lyricPosition]，但播放时直接读引擎的实时位置（引擎按时钟推算），
+  /// 比 50ms 一次的进度更细。给逐时间每帧取值的动画用，比如逐字填色。
+  Duration get liveLyricPosition =>
+      (_playing ? _engine.position : _position) + (_trial?.start ?? Duration.zero) + _lyricOffset;
 
   /// 当前所在歌词行；还没到第一行时返回 -1。
   int get activeLyricIndex {
@@ -695,7 +810,9 @@ class PlayerController extends ChangeNotifier {
     }
     if (!keepLyrics) {
       _lyrics = Lyrics.empty;
-      unawaited(_loadLyrics(song, _settings.lyricSource, fallback: true));
+      unawaited(
+        _loadLyrics(song, _settings.lyricSource, fallback: true, order: _settings.lyricSources),
+      );
     }
     _playing = false;
     notifyListeners();
@@ -714,7 +831,7 @@ class PlayerController extends ChangeNotifier {
       }
       if (changingSong || _qualities.isEmpty) {
         try {
-          _qualities = await _backend.qualities(song.id);
+          _qualities = await _fetchQualities(song.id);
         } on ApiException {
           _qualities = const []; // 取不到就直接按偏好请求，由服务端降级。
         }
@@ -813,28 +930,35 @@ class PlayerController extends ChangeNotifier {
   /// 放缓存时在后台取一下音质列表，给播放页切音质用。取不到就算了。
   Future<void> _loadQualities(Song song, int token) async {
     try {
-      final q = await _backend.qualities(song.id);
+      final q = await _fetchQualities(song.id);
       if (token != _token) return;
       _qualities = q;
       notifyListeners();
     } catch (_) {}
   }
 
-  Future<void> _loadLyrics(Song song, LyricSource source, {required bool fallback}) async {
+  Future<void> _loadLyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) async {
+    final request = ++_lyricsRequest;
+    bool stale() => request != _lyricsRequest || current?.id != song.id;
     _lyricsLoading = true;
     try {
-      final l = await _backend.lyrics(song, source, fallback: fallback);
-      if (current?.id != song.id) return;
+      final l = await _backend.lyrics(song, source, fallback: fallback, order: order);
+      if (stale()) return;
       if (l.isEmpty && !fallback) {
         _notices.add('${source.label}没有这首歌的歌词');
         return;
       }
       _lyrics = l;
     } catch (_) {
-      if (current?.id != song.id) return;
+      if (stale()) return;
       if (!fallback) _notices.add('${source.label}歌词获取失败');
     } finally {
-      if (current?.id == song.id) {
+      if (!stale()) {
         _lyricsLoading = false;
         notifyListeners();
       }
@@ -983,6 +1107,13 @@ class PlayerController extends ChangeNotifier {
     }
     if (current == null || q == _quality) return Future.value();
     return _load(_index, startAt: _position, autoplay: isPlaying, keepLyrics: true);
+  }
+
+  /// 歌词来源顺序或开关改了：按新顺序重新取当前这首的歌词（已取过的来源有缓存，很快）。
+  Future<void> reloadLyrics() async {
+    final s = current;
+    if (s == null) return;
+    await _loadLyrics(s, _settings.lyricSource, fallback: true, order: _settings.lyricSources);
   }
 
   /// 换一个歌词来源（只查这一个来源）。没有歌词时保留当前歌词并提示。

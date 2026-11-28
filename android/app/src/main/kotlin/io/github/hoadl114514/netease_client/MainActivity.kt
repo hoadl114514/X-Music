@@ -24,6 +24,30 @@ class MainActivity : AudioServiceActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
+        preferHighRefreshRate()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        preferHighRefreshRate()
+    }
+
+    // 不少系统（ColorOS、MIUI 等）默认只给应用 60Hz，要应用自己声明想用高刷新率。
+    // 选当前分辨率下刷新率最高的模式；屏幕不支持高刷时就是当前模式，没有影响。
+    private fun preferHighRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val current = display.mode
+        val best = display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        if (window.attributes.preferredDisplayModeId == best.modeId) return
+        window.attributes = window.attributes.apply { preferredDisplayModeId = best.modeId }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
