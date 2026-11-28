@@ -26,6 +26,13 @@ class FakeEngine implements AudioEngine {
   Duration _position = Duration.zero;
   final _completed = StreamController<void>.broadcast();
   final _errors = StreamController<Object>.broadcast();
+  final _playingChanges = StreamController<bool>.broadcast();
+
+  /// 模拟内核自己暂停 / 继续（被其他应用打断、焦点恢复）。
+  void interrupt({required bool playing}) {
+    this.playing = playing;
+    _playingChanges.add(playing);
+  }
 
   /// 接下来这么多次 load 直接失败（模拟 Source error）。
   int failLoads = 0;
@@ -80,6 +87,9 @@ class FakeEngine implements AudioEngine {
 
   @override
   Stream<Object> get errors => _errors.stream;
+
+  @override
+  Stream<bool> get playingChanges => _playingChanges.stream;
 
   @override
   Future<void> dispose() async {}
