@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../../app/app.dart';
 import '../../data/models.dart';
 import '../../state/player_controller.dart';
+import 'karaoke_text.dart';
 import 'lyrics_copy.dart';
 
 /// 歌词列表。当前行白色、放大并逐字填色（正在唱的字微微上浮发光），其他行半透明；
@@ -135,10 +136,10 @@ class _LyricsViewState extends State<LyricsView> {
                 _LyricLine(
                   key: _keys[i],
                   line: line,
-                  state: i < active
-                      ? _LineState.past
-                      : i == active
+                  state: i == active || _stillSinging(lyrics, i, active, player.lyricPosition)
                       ? _LineState.active
+                      : i < active
+                      ? _LineState.past
                       : _LineState.future,
                   position: player.lyricPosition,
                   fontSize: widget.fontSize,
@@ -181,6 +182,11 @@ class _LyricsViewState extends State<LyricsView> {
       },
     );
   }
+
+  /// 重叠演唱：下一行已经开始，但这一行（或它的背景人声）还没唱完时，继续当作当前行显示。
+  /// 只看逐字歌词，逐行歌词的结束时间多半是推算的。最多往前看 3 行。
+  static bool _stillSinging(Lyrics lyrics, int i, int active, Duration position) =>
+      lyrics.wordSynced && i < active && i >= active - 3 && position < lyrics.lines[i].end;
 
   /// 和当前行相距 [d] 行时的不透明度：越远越淡，营造景深感。
   /// 不用实时模糊：每行一个 saveLayer + 高斯模糊在滚动时每帧都要重算，中端机会掉帧。
@@ -286,48 +292,18 @@ class _LyricLine extends StatelessWidget {
     );
   }
 
-  /// 一行歌词正文。当前行逐字填色；有注音时每个字单独排版，注音放在字上方。
+  /// 一行歌词正文。所有状态用同一次排版，当前行逐字填色。
   Widget _text(LyricLine l, double size, Color dimmed) {
-    final style = TextStyle(fontSize: size, fontWeight: FontWeight.w800, height: 1.25);
-    final textAlign = line.duet ? TextAlign.right : TextAlign.left;
-    final wrapAlign = line.duet ? WrapAlignment.end : WrapAlignment.start;
     final active = state == _LineState.active;
-    final hasRuby = l.words.any((w) => w.ruby != null);
-    if (active && wordSynced) {
-      return Wrap(
-        alignment: wrapAlign,
-        crossAxisAlignment: WrapCrossAlignment.end,
-        children: [
-          for (final w in l.words)
-            _KaraokeWord(
-              text: w.text,
-              ruby: w.ruby,
-              progress: w.progressAt(position),
-              style: style,
-            ),
-        ],
-      );
-    }
-    final color = active ? _sung : dimmed;
-    if (!hasRuby) {
-      return Text(
-        l.text,
-        textAlign: textAlign,
-        style: style.copyWith(color: color),
-      );
-    }
-    return Wrap(
-      alignment: wrapAlign,
-      crossAxisAlignment: WrapCrossAlignment.end,
-      children: [
-        for (final w in l.words)
-          _Ruby(
-            ruby: w.ruby,
-            size: size,
-            color: color,
-            child: Text(w.text, style: style.copyWith(color: color)),
-          ),
-      ],
+    return KaraokeText(
+      words: l.words,
+      style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, height: 1.25),
+      color: active ? _sung : dimmed,
+      karaoke: active && wordSynced,
+      position: position,
+      dimColor: _dim,
+      litColor: _sung,
+      textAlign: line.duet ? TextAlign.right : TextAlign.left,
     );
   }
 
@@ -339,97 +315,6 @@ class _LyricLine extends StatelessWidget {
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeOutCubic,
       child: child,
-    );
-  }
-}
-
-/// 注音放在字的正上方。没有注音时原样返回。
-class _Ruby extends StatelessWidget {
-  const _Ruby({required this.ruby, required this.size, required this.color, required this.child});
-
-  final String? ruby;
-  final double size;
-  final Color color;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = ruby;
-    if (r == null) return child;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          r,
-          maxLines: 1,
-          softWrap: false,
-          style: TextStyle(
-            fontSize: size * 0.42,
-            fontWeight: FontWeight.w600,
-            height: 1.1,
-            color: color,
-          ),
-        ),
-        child,
-      ],
-    );
-  }
-}
-
-/// 单个字的逐字填色：底层半透明文字，上层白色文字按 [progress] 从左往右显现；
-/// 唱这个字时整体上浮一点并带柔光，唱完保持上浮。
-class _KaraokeWord extends StatelessWidget {
-  const _KaraokeWord({required this.text, required this.progress, required this.style, this.ruby});
-
-  final String text;
-  final String? ruby;
-  final double progress;
-  final TextStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    final word = _word();
-    if (ruby == null) return word;
-    final color = progress > 0 ? _sung : _dim;
-    return _Ruby(ruby: ruby, size: style.fontSize!, color: color, child: word);
-  }
-
-  Widget _word() {
-    final dim = Text(text, style: style.copyWith(color: _dim));
-    if (progress <= 0) return dim;
-    // 光晕在唱到一半时最亮，唱完消失。
-    final glow = math.sin(math.pi * progress.clamp(0.0, 1.0)) * 0.55;
-    final lit = Text(
-      text,
-      style: style.copyWith(
-        color: _sung,
-        shadows: glow > 0.01
-            ? [Shadow(color: Colors.white.withValues(alpha: glow), blurRadius: 12)]
-            : null,
-      ),
-    );
-    final lift = Offset(
-      0,
-      -0.08 * style.fontSize! * Curves.easeOut.transform(progress.clamp(0.0, 1.0)),
-    );
-    if (progress >= 1) return Transform.translate(offset: lift, child: lit);
-    return Transform.translate(offset: lift, child: _fill(dim, lit));
-  }
-
-  Widget _fill(Widget dim, Widget lit) {
-    return Stack(
-      children: [
-        dim,
-        ShaderMask(
-          blendMode: BlendMode.dstIn,
-          shaderCallback: (r) => LinearGradient(
-            colors: const [Colors.white, Colors.white, Colors.transparent, Colors.transparent],
-            // 边缘留一点羽化，填色过渡更柔和。
-            stops: [0, (progress - 0.06).clamp(0.0, 1.0), (progress + 0.06).clamp(0.0, 1.0), 1],
-          ).createShader(r),
-          child: lit,
-        ),
-      ],
     );
   }
 }
