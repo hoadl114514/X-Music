@@ -103,10 +103,6 @@ class AppSettings extends ChangeNotifier {
   bool get usbExclusive => _prefs.getBool(_kUsbExclusive) ?? false;
   set usbExclusive(bool v) => _set(() => _prefs.setBool(_kUsbExclusive, v));
 
-  /// 和其他应用同时播放：不申请音频焦点，别的应用出声时不暂停。
-  bool get mixWithOthers => _prefs.getBool(_kMixWithOthers) ?? false;
-  set mixWithOthers(bool v) => _set(() => _prefs.setBool(_kMixWithOthers, v));
-
   /// 默认歌词来源。取不到时自动换另一个来源。
   LyricSource get lyricSource =>
       LyricSource.byName(_prefs.getString(_kLyricSource)) ?? LyricSource.netease;
@@ -138,6 +134,10 @@ class AppSettings extends ChangeNotifier {
   /// 登录后把听过的歌上报给网易云，同步到官方客户端的「最近播放」。
   bool get syncRecentPlays => _prefs.getBool(_kSyncRecent) ?? true;
   set syncRecentPlays(bool v) => _set(() => _prefs.setBool(_kSyncRecent, v));
+
+  /// 和其他应用同时播放：不申请音频焦点，别的应用出声时不暂停。
+  bool get mixWithOthers => _prefs.getBool(_kMixWithOthers) ?? false;
+  set mixWithOthers(bool v) => _set(() => _prefs.setBool(_kMixWithOthers, v));
 
   /// 上次选的播放模式（`PlayMode.name`：list / shuffle / one），没选过为 null。
   String? get playMode => _prefs.getString(_kPlayMode);
