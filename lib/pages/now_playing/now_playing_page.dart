@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../../app/app.dart';
 import '../../data/models.dart';
@@ -71,21 +70,15 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
 
   late final _pages = PageController(initialPage: widget.initialLyrics ? _lyricsPage : _coverPage);
 
-  /// 百科页往下翻时收起进度条和播放按钮，往回翻时再放出来。
-  bool _controlsHidden = false;
-
-  void _setControlsHidden(bool hidden) {
-    if (hidden != _controlsHidden) setState(() => _controlsHidden = hidden);
-  }
+  /// 只在封面页显示进度条和播放按钮；百科页和歌词页收起，留更多空间给内容。
+  late bool _controlsHidden = _pages.initialPage != _coverPage;
 
   @override
   void initState() {
     super.initState();
-    // 离开百科页就恢复播放控制。
     _pages.addListener(() {
-      if (_controlsHidden && (_pages.page ?? 0).round() != _wikiPage) {
-        _setControlsHidden(false);
-      }
+      final hidden = (_pages.page ?? _coverPage.toDouble()).round() != _coverPage;
+      if (hidden != _controlsHidden) setState(() => _controlsHidden = hidden);
     });
   }
 
@@ -132,11 +125,7 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     children: [
                       Padding(
                         padding: _hPad,
-                        child: _WikiPane(
-                          song: song,
-                          onTapHeader: () => _goTo(_coverPage),
-                          onScrollDown: _setControlsHidden,
-                        ),
+                        child: _WikiPane(song: song, onTapHeader: () => _goTo(_coverPage)),
                       ),
                       Padding(
                         padding: _hPad,
@@ -163,28 +152,24 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                       opacity: _controlsHidden ? 0 : 1,
                       child: IgnorePointer(
                         ignoring: _controlsHidden,
-                        child: const Column(
-                          children: [
-                            Padding(
-                              padding: _hPad,
-                              child: Column(
-                                children: [
-                                  SeekBar(),
-                                  SizedBox(height: 4),
-                                  _QualityPill(),
-                                  SizedBox(height: 12),
-                                  _Controls(),
-                                ],
-                              ),
-                            ),
-                            // 在一起听房间里时显示一起听条；不在时留一段空白，单手拇指更好按。
-                            ListenTogetherBar(),
-                          ],
+                        child: const Padding(
+                          padding: _hPad,
+                          child: Column(
+                            children: [
+                              SeekBar(),
+                              SizedBox(height: 4),
+                              _QualityPill(),
+                              SizedBox(height: 12),
+                              _Controls(),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
+                // 在一起听房间里时显示一起听条；不在时留一段空白，单手拇指更好按。
+                const ListenTogetherBar(),
               ],
             ),
           ),
@@ -401,13 +386,10 @@ class _LyricsPane extends StatelessWidget {
 
 /// 百科页（封面右边一页）：顶部小封面和歌名，下面是歌曲百科。点顶部或向右滑回到封面。
 class _WikiPane extends StatelessWidget {
-  const _WikiPane({required this.song, required this.onTapHeader, required this.onScrollDown});
+  const _WikiPane({required this.song, required this.onTapHeader});
 
   final Song song;
   final VoidCallback onTapHeader;
-
-  /// 往下翻（看更多内容）时传 true，往回翻或回到顶部时传 false。
-  final ValueChanged<bool> onScrollDown;
 
   @override
   Widget build(BuildContext context) {
@@ -438,23 +420,7 @@ class _WikiPane extends StatelessWidget {
           child: ShaderMask(
             shaderCallback: _fadeEdges,
             blendMode: BlendMode.dstIn,
-            child: NotificationListener<ScrollNotification>(
-              onNotification: (n) {
-                // 只看竖向滚动；相关歌单那一排横向列表不算。
-                if (n.metrics.axis != Axis.vertical) return false;
-                // 方向一变就切换。方向通知在位置更新之前发出，刚开始往下翻时位置还是 0，
-                // 所以「回到顶部」只看位置更新，不看方向通知。
-                if (n is UserScrollNotification) {
-                  if (n.direction == ScrollDirection.reverse) onScrollDown(true);
-                  if (n.direction == ScrollDirection.forward) onScrollDown(false);
-                } else if (n is ScrollUpdateNotification &&
-                    n.metrics.pixels <= n.metrics.minScrollExtent) {
-                  onScrollDown(false);
-                }
-                return false;
-              },
-              child: SongWikiView(song: song),
-            ),
+            child: SongWikiView(song: song),
           ),
         ),
       ],
