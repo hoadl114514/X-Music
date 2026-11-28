@@ -37,6 +37,16 @@ abstract final class TtmlParser {
         ? const <String, List<_Sub>>{}
         : _sidecar(head, 'transliteration');
 
+    // 歌曲段落：`<div itunes:songPart>`（旧写法 `itunes:song-part`），里层的覆盖外层。
+    final partOf = Map<_XmlElement, String>.identity();
+    for (final div in body.findAll('div')) {
+      final part = div.attr('songPart') ?? div.attr('song-part');
+      if (part == null || part.isEmpty) continue;
+      for (final p in div.findAll('p')) {
+        partOf[p] = part;
+      }
+    }
+
     final raws = <_Line>[];
     // 对唱判定，和 AMLL 一致：合唱不参与；第一位歌手类型为 other 时放右侧；
     // 换了一位歌手就换一侧。
@@ -85,7 +95,7 @@ abstract final class TtmlParser {
           stripParens: true,
         );
       }
-      raws.add(main.withExtras(duet: duet, background: bg));
+      raws.add(main.withExtras(duet: duet, background: bg, songPart: partOf[p]));
     }
     raws.sort((a, b) => a.start - b.start);
 
@@ -179,12 +189,31 @@ class _Sub {
 }
 
 class _Word {
-  _Word(this.start, this.end, this.text, {this.ruby});
+  _Word(this.start, this.end, this.text, {this.ruby, this.obscene = false, this.emptyBeat = 0});
 
   final int start;
   final int end;
   String text;
   final String? ruby;
+
+  /// `amll:obscene="true"`：不雅用语。
+  final bool obscene;
+
+  /// `amll:empty-beat`：空拍数。
+  final int emptyBeat;
+
+  /// 换一段文字，其他信息不变。
+  _Word copy({String? text, int? start, int? end}) => _Word(
+    start ?? this.start,
+    end ?? this.end,
+    text ?? this.text,
+    ruby: ruby,
+    obscene: obscene,
+    emptyBeat: emptyBeat,
+  );
+
+  static bool obsceneOf(_XmlElement el) => el.attr('obscene') == 'true';
+  static int emptyBeatOf(_XmlElement el) => int.tryParse(el.attr('empty-beat') ?? '') ?? 0;
 }
 
 /// 一个 `<p>`（或背景人声 span、翻译 span、head 里的 `<text>`）里读出来的东西。
@@ -282,7 +311,15 @@ class _Content {
         final clean = t.trim();
         if (!formatting && t.startsWith(' ')) _markSpace();
         if (clean.isEmpty) return;
-        words.add(_Word(begin, end, !formatting && t.endsWith(' ') ? '$clean ' : clean));
+        words.add(
+          _Word(
+            begin,
+            end,
+            !formatting && t.endsWith(' ') ? '$clean ' : clean,
+            obscene: _Word.obsceneOf(el),
+            emptyBeat: _Word.emptyBeatOf(el),
+          ),
+        );
     }
   }
 
@@ -322,6 +359,8 @@ class _Content {
         end,
         base.endsWith(' ') ? '$clean ' : clean,
         ruby: rubies.isEmpty ? null : rubies.join(),
+        obscene: _Word.obsceneOf(container),
+        emptyBeat: _Word.emptyBeatOf(container),
       ),
     );
   }
@@ -338,7 +377,7 @@ class _Content {
     final timed = !lineTiming && words.isNotEmpty;
     List<_Word> out;
     if (timed) {
-      out = [for (final w in words) _Word(w.start, w.end, w.text, ruby: w.ruby)];
+      out = [for (final w in words) w.copy()];
     } else {
       final text = plainText;
       final start = begin ?? (words.isEmpty ? null : words.map((w) => w.start).reduce(min));
@@ -376,6 +415,7 @@ class _Line {
     this.romaji,
     this.duet = false,
     this.background,
+    this.songPart,
   });
 
   final int start;
@@ -386,8 +426,9 @@ class _Line {
   final String? romaji;
   final bool duet;
   final _Line? background;
+  final String? songPart;
 
-  _Line withExtras({required bool duet, _Line? background}) {
+  _Line withExtras({required bool duet, _Line? background, String? songPart}) {
     // 背景人声可能比主歌词早开始、晚结束：整行范围要把它包进来。
     final bgEnd = background?.end ?? background?.words.map((w) => w.end).reduce(max);
     return _Line(
@@ -399,12 +440,13 @@ class _Line {
       romaji: romaji,
       duet: duet,
       background: background,
+      songPart: songPart,
     );
   }
 
   LyricLine build(int fallbackEnd) {
     final stop = max(end ?? fallbackEnd, start + 1);
-    final ws = timedWords ? words : [_Word(start, stop, words.single.text)];
+    final ws = timedWords ? words : [words.single.copy(start: start, end: stop)];
     return LyricLine(
       start: TtmlParser._ms(start),
       end: TtmlParser._ms(stop),
@@ -416,12 +458,15 @@ class _Line {
               TtmlParser._ms(w.start),
               TtmlParser._ms(max(w.end, w.start)),
               ruby: w.ruby,
+              obscene: w.obscene,
+              emptyBeat: w.emptyBeat,
             ),
       ],
       translation: translation,
       romaji: romaji,
       duet: duet,
       background: background?.build(stop),
+      songPart: songPart,
     );
   }
 }

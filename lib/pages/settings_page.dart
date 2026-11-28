@@ -100,6 +100,22 @@ class SettingsPage extends StatelessWidget {
             value: settings.showRomaji,
             onChanged: (v) => settings.showRomaji = v,
           ),
+          ListTile(
+            leading: const Icon(Icons.visibility_off_outlined),
+            title: const Text('屏蔽不雅用语'),
+            subtitle: const Text('只对标了不雅用语的歌词生效（AMLL 歌词）'),
+            trailing: DropdownButton<ObsceneMask>(
+              value: settings.obsceneMask,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final m in ObsceneMask.values)
+                  DropdownMenuItem(value: m, child: Text(m.label)),
+              ],
+              onChanged: (v) {
+                if (v != null) settings.obsceneMask = v;
+              },
+            ),
+          ),
           SwitchListTile(
             secondary: const Icon(Icons.history_rounded),
             title: const Text('同步最近播放到网易云'),

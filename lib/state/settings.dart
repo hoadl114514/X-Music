@@ -26,6 +26,7 @@ class AppSettings extends ChangeNotifier {
   static const _kLyricSourceOff = 'lyric_source_disabled';
   static const _kTranslation = 'show_translation';
   static const _kRomaji = 'show_romaji';
+  static const _kObsceneMask = 'lyric_obscene_mask';
   static const _kSearchHistory = 'search_history';
   static const _kSyncRecent = 'sync_recent_plays';
   static const _kPlayMode = 'play_mode';
@@ -157,6 +158,11 @@ class AppSettings extends ChangeNotifier {
 
   bool get showRomaji => _prefs.getBool(_kRomaji) ?? true;
   set showRomaji(bool v) => _set(() => _prefs.setBool(_kRomaji, v));
+
+  /// 歌词里标为不雅用语的词怎么显示。默认不屏蔽，和 AMLL 一致。
+  ObsceneMask get obsceneMask =>
+      ObsceneMask.values.asNameMap()[_prefs.getString(_kObsceneMask)] ?? ObsceneMask.off;
+  set obsceneMask(ObsceneMask v) => _set(() => _prefs.setString(_kObsceneMask, v.name));
 
   /// 搜索历史，最近的在前。
   List<String> get searchHistory => _prefs.getStringList(_kSearchHistory) ?? const [];

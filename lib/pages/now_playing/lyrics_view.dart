@@ -59,6 +59,7 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
   int _followTarget = -1;
   double _followFrom = 0;
   List<GlobalKey> _keys = const [];
+  List<LyricInterlude> _interludes = const [];
   Lyrics? _lyrics;
   int _lastActive = -2;
   DateTime _userScrolledAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -77,6 +78,7 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     if (identical(_lyrics, lyrics)) return;
     _lyrics = lyrics;
     _keys = List.generate(lyrics.lines.length, (_) => GlobalKey());
+    _interludes = lyricInterludes(lyrics);
     _lastActive = -2;
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
@@ -134,8 +136,10 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     final lines = lyrics.lines;
     _syncKeys(lyrics);
     _player = player;
-    // 播放逐字歌词时逐帧推进；暂停或逐行歌词时不占用每一帧。
-    if (player.isPlaying && lyrics.wordSynced) {
+    final position = player.lyricPosition;
+    final interlude = _interludes.where((x) => x.contains(position)).firstOrNull;
+    // 播放逐字歌词或间奏点动画时逐帧推进；暂停或逐行歌词时不占用每一帧。
+    if (player.isPlaying && (lyrics.wordSynced || interlude != null)) {
       if (!_ticker.isActive) _ticker.start();
     } else {
       if (_ticker.isActive) _ticker.stop();
@@ -156,6 +160,15 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
     }
     final showTranslation = settings.showTranslation;
     final showRomaji = settings.showRomaji;
+    final mask = settings.obsceneMask;
+    final dotsAfter = {for (final x in _interludes) x.after: x};
+    Widget dots(LyricInterlude x) => _InterludeDots(
+      interlude: x,
+      visible: identical(x, interlude),
+      clock: _clock,
+      size: widget.fontSize,
+      right: x.after + 1 < lines.length && lines[x.after + 1].duet,
+    );
     final browsing = DateTime.now().difference(_userScrolledAt) < _followPause;
     final depth = widget.depth && !browsing && active >= 0;
 
@@ -174,13 +187,18 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (final (i, line) in lines.indexed)
+              // 前奏的点放在第一行前面，其余的放在间奏前那一行后面。
+              if (dotsAfter[-1] case final x?) dots(x),
+              for (final (i, line) in lines.indexed) ...[
                 _LyricLine(
                   key: _keys[i],
                   line: line,
-                  state: i == active || _stillSinging(lyrics, i, active, player.lyricPosition)
+                  // 间奏时上一句已经唱完，变暗，把焦点让给间奏点。
+                  state:
+                      (i == active && interlude == null) ||
+                          _stillSinging(lyrics, i, active, player.lyricPosition)
                       ? _LineState.active
-                      : i < active
+                      : i <= active
                       ? _LineState.past
                       : _LineState.future,
                   position: player.lyricPosition,
@@ -204,7 +222,10 @@ class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
                   onLongPress: widget.interactive
                       ? () => showLyricLineActions(context, player.song, lyrics, i)
                       : null,
+                  mask: mask,
                 ),
+                if (dotsAfter[i] case final x?) dots(x),
+              ],
             ],
           ),
         );
@@ -267,6 +288,7 @@ class _LyricLine extends StatelessWidget {
     required this.fade,
     required this.onTap,
     this.onLongPress,
+    this.mask = ObsceneMask.off,
   });
 
   final LyricLine line;
@@ -284,6 +306,9 @@ class _LyricLine extends StatelessWidget {
   final double fade;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+
+  /// 不雅用语怎么显示。
+  final ObsceneMask mask;
 
   @override
   Widget build(BuildContext context) {
@@ -370,7 +395,7 @@ class _LyricLine extends StatelessWidget {
   Widget _text(LyricLine l, double size, Color dimmed) {
     final active = state == _LineState.active;
     return KaraokeText(
-      words: l.words,
+      words: _masked(l.words, mask),
       style: TextStyle(fontSize: size, fontWeight: FontWeight.w800, height: 1.25),
       color: active ? _sung : dimmed,
       karaoke: active && wordSynced,
@@ -392,4 +417,166 @@ class _LyricLine extends StatelessWidget {
       child: child,
     );
   }
+}
+
+/// 屏蔽后的字。同一行同一模式复用同一个列表，KaraokeText 不用每次重新排版。
+final _maskCache = Expando<(ObsceneMask, List<LyricWord>)>();
+
+List<LyricWord> _masked(List<LyricWord> words, ObsceneMask mask) {
+  if (mask == ObsceneMask.off || !words.any((w) => w.obscene)) return words;
+  if (_maskCache[words] case (final m, final cached) when m == mask) return cached;
+  final out = [
+    for (final w in words)
+      w.obscene
+          ? LyricWord(
+              w.display(mask),
+              w.start,
+              w.end,
+              ruby: w.ruby,
+              obscene: true,
+              emptyBeat: w.emptyBeat,
+            )
+          : w,
+  ];
+  _maskCache[words] = (mask, out);
+  return out;
+}
+
+/// 两句歌词之间（或第一句之前）空了很久的地方。
+@immutable
+class LyricInterlude {
+  const LyricInterlude({required this.after, required this.start, required this.end});
+
+  /// 间奏前那一行的序号；前奏为 -1。
+  final int after;
+  final Duration start;
+  final Duration end;
+
+  bool contains(Duration t) => t >= start && t < end;
+}
+
+/// 空多久才算间奏、显示浮动的点。
+const interludeGap = Duration(seconds: 5);
+
+/// 找出所有间奏：前面所有行都唱完，到下一行开始还有 [minGap] 以上。
+/// 歌词行可能重叠，所以「唱完」按前面所有行里最晚的结束时间算，和 AMLL 一样。
+@visibleForTesting
+List<LyricInterlude> lyricInterludes(Lyrics lyrics, {Duration minGap = interludeGap}) {
+  final lines = lyrics.lines;
+  final out = <LyricInterlude>[];
+  var maxEnd = Duration.zero;
+  for (var i = -1; i < lines.length - 1; i++) {
+    if (i >= 0 && lines[i].end > maxEnd) maxEnd = lines[i].end;
+    final next = lines[i + 1].start;
+    if (next - maxEnd >= minGap) {
+      out.add(LyricInterlude(after: i, start: maxEnd, end: next));
+    }
+  }
+  return out;
+}
+
+/// 间奏时浮在歌词之间的三个点。整段间奏均分成三份，每过一份消失一个（从右往左），
+/// 像倒计时：剩 3 份 3 个点，剩 2 份 2 个点，剩 1 份 1 个点。不在间奏里时收起。
+class _InterludeDots extends StatelessWidget {
+  const _InterludeDots({
+    required this.interlude,
+    required this.visible,
+    required this.clock,
+    required this.size,
+    required this.right,
+  });
+
+  final LyricInterlude interlude;
+  final bool visible;
+  final ValueListenable<Duration> clock;
+  final double size;
+
+  /// 下一句是对唱（靠右）时，点也靠右。
+  final bool right;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = size * 1.4;
+    return AnimatedCrossFade(
+      duration: const Duration(milliseconds: 420),
+      sizeCurve: Curves.easeOutCubic,
+      alignment: right ? Alignment.topRight : Alignment.topLeft,
+      crossFadeState: visible ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      firstChild: const SizedBox(width: double.infinity),
+      secondChild: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: CustomPaint(
+          painter: InterludeDotsPainter(
+            clock: clock,
+            start: interlude.start,
+            end: interlude.end,
+            radius: size * 0.2,
+            right: right,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 画间奏点。监听 [clock] 每帧重画，不重建 widget。
+@visibleForTesting
+class InterludeDotsPainter extends CustomPainter {
+  InterludeDotsPainter({
+    required this.clock,
+    required this.start,
+    required this.end,
+    required this.radius,
+    required this.right,
+  }) : super(repaint: clock);
+
+  final ValueListenable<Duration> clock;
+  final Duration start;
+  final Duration end;
+  final double radius;
+  final bool right;
+
+  static const count = 3;
+
+  /// 每个点在它那一份的最后这段时间里淡出、缩小。
+  static const _fadeShare = 0.35;
+
+  /// 第 [k] 个点（从左数，0 起）在 [t] 时的不透明度，0–1。
+  static double opacityAt(int k, Duration t, Duration start, Duration end) {
+    final total = (end - start).inMicroseconds;
+    if (total <= 0) return 0;
+    final f = ((t - start).inMicroseconds / total).clamp(0.0, 1.0);
+    // 还剩几份（0–3），第 k 个点在剩下不到 k+1 份时开始消失。
+    final left = (1 - f) * count - k;
+    return (left / _fadeShare).clamp(0.0, 1.0);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = clock.value;
+    final ms = t.inMilliseconds;
+    final gap = radius * 3.2;
+    final width = gap * (count - 1);
+    final x0 = right ? size.width - radius * 1.5 - width : radius * 1.5;
+    final cy = size.height / 2;
+    // 整体轻轻呼吸。
+    final breathe = 1 + 0.06 * math.sin(ms / 1000 * math.pi * 2 / 2.4);
+    for (var k = 0; k < count; k++) {
+      final a = opacityAt(k, t, start, end);
+      if (a <= 0) continue;
+      // 每个点错开相位上下浮动。
+      final dy = math.sin(ms / 1000 * math.pi * 2 / 1.6 - k * 0.6) * radius * 0.35;
+      final r = radius * breathe * (0.55 + 0.45 * a);
+      canvas.drawCircle(
+        Offset(x0 + gap * k, cy + dy),
+        r,
+        Paint()..color = Colors.white.withValues(alpha: 0.85 * a),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(InterludeDotsPainter old) =>
+      old.start != start || old.end != end || old.radius != radius || old.right != right;
 }

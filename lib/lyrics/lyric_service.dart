@@ -19,7 +19,7 @@ class LyricService {
   final DataCache? _store;
 
   /// 缓存格式版本。解析逻辑大改时加一，旧缓存自动作废。
-  static const _version = 1;
+  static const _version = 2;
   final _cache = <(String, LyricSource), Lyrics>{};
   final _inFlight = <(String, LyricSource), Future<Lyrics>>{};
 

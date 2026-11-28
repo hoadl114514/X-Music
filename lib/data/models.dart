@@ -444,7 +444,14 @@ class SongUrl {
 
 /// 逐字歌词里的一个"字"（实际上可以是一个词或一个音节）。
 class LyricWord {
-  const LyricWord(this.text, this.start, this.end, {this.ruby});
+  const LyricWord(
+    this.text,
+    this.start,
+    this.end, {
+    this.ruby,
+    this.obscene = false,
+    this.emptyBeat = 0,
+  });
 
   final String text;
   final Duration start;
@@ -452,6 +459,29 @@ class LyricWord {
 
   /// 注音（日语振假名、拼音等），显示在字的上方。只有 TTML 歌词会有。
   final String? ruby;
+
+  /// 不雅用语（TTML 的 `amll:obscene`），按设置屏蔽显示。
+  final bool obscene;
+
+  /// 空拍数（TTML 的 `amll:empty-beat`）。AMLL 打轴工具的标记，播放时不影响显示，保留下来。
+  final int emptyBeat;
+
+  /// 按 [mode] 屏蔽后要显示的文字。不是不雅用语或不屏蔽时原样返回。
+  String display(ObsceneMask mode) {
+    if (!obscene || mode == ObsceneMask.off) return text;
+    final trailing = text.length - text.trimRight().length;
+    final core = text.trimRight();
+    final chars = [for (final r in core.runes) String.fromCharCode(r)];
+    final String masked;
+    if (mode == ObsceneMask.full || chars.length <= 2) {
+      masked = mode == ObsceneMask.full || chars.length <= 1
+          ? '*' * chars.length
+          : '${chars.first}*';
+    } else {
+      masked = '${chars.first}${'*' * (chars.length - 2)}${chars.last}';
+    }
+    return masked + ' ' * trailing;
+  }
 
   /// 在 [position] 时该字已唱出的比例，0–1。
   double progressAt(Duration position) {
@@ -470,6 +500,7 @@ class LyricLine {
     this.romaji,
     this.duet = false,
     this.background,
+    this.songPart,
   });
 
   final Duration start;
@@ -487,6 +518,9 @@ class LyricLine {
   /// 它自己的 [start]、[end] 不影响当前行的判断。
   final LyricLine? background;
 
+  /// 所在的歌曲段落（TTML 的 `itunes:songPart`），如 `Verse`、`Chorus`。没标时为 null。
+  final String? songPart;
+
   String get text => words.map((w) => w.text).join();
 
   LyricLine copyWith({String? translation, String? romaji}) => LyricLine(
@@ -497,7 +531,19 @@ class LyricLine {
     romaji: romaji ?? this.romaji,
     duet: duet,
     background: background,
+    songPart: songPart,
   );
+}
+
+/// 不雅用语（`amll:obscene`）怎么显示。
+enum ObsceneMask {
+  off('不屏蔽'),
+  partial('保留首尾'),
+  full('全部屏蔽');
+
+  const ObsceneMask(this.label);
+
+  final String label;
 }
 
 enum LyricSource {
@@ -561,12 +607,21 @@ class Lyrics {
     's': l.start.inMilliseconds,
     'e': l.end.inMilliseconds,
     'w': [
-      for (final w in l.words) [w.text, w.start.inMilliseconds, w.end.inMilliseconds, ?w.ruby],
+      for (final w in l.words)
+        [
+          w.text,
+          w.start.inMilliseconds,
+          w.end.inMilliseconds,
+          if (w.ruby != null || w.obscene || w.emptyBeat > 0) w.ruby,
+          if (w.obscene || w.emptyBeat > 0) w.obscene,
+          if (w.emptyBeat > 0) w.emptyBeat,
+        ],
     ],
     't': ?l.translation,
     'r': ?l.romaji,
     if (l.duet) 'd': true,
     if (l.background case final bg?) 'bg': _lineJson(bg),
+    'part': ?l.songPart,
   };
 
   static LyricLine? _lineFrom(Object? json) {
@@ -584,6 +639,8 @@ class Lyrics {
           Duration(milliseconds: x[1] as int),
           Duration(milliseconds: x[2] as int),
           ruby: x.length > 3 ? x[3] as String? : null,
+          obscene: x.length > 4 && x[4] == true,
+          emptyBeat: x.length > 5 && x[5] is int ? x[5] as int : 0,
         ),
       );
     }
@@ -595,6 +652,7 @@ class Lyrics {
       romaji: json['r'] as String?,
       duet: json['d'] == true,
       background: json['bg'] == null ? null : _lineFrom(json['bg']),
+      songPart: json['part'] as String?,
     );
   }
 }
