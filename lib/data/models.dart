@@ -176,6 +176,47 @@ class Playlist {
         );
 }
 
+extension PlaylistJson on Playlist {
+  /// 存本地缓存用。封面主色不存。
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'plays': playCount,
+    'tracks': trackCount,
+    'cover': ?coverUrl,
+    'creator': ?creator,
+    'creatorId': ?creatorId,
+    'desc': ?description,
+    if (subscribed) 'sub': true,
+    if (isLikedList) 'liked': true,
+    if (shared) 'shared': true,
+    if (sharedUsers.isNotEmpty) 'users': [for (final u in sharedUsers) u.toJson()],
+  };
+
+  /// [toJson] 的逆操作；格式不对时返回 null。
+  static Playlist? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! String || name is! String) return null;
+    return Playlist(
+      id: id,
+      name: name,
+      playCount: json['plays'] as int? ?? 0,
+      trackCount: json['tracks'] as int? ?? 0,
+      coverUrl: json['cover'] as String?,
+      creator: json['creator'] as String?,
+      creatorId: json['creatorId'] as int?,
+      description: json['desc'] as String?,
+      subscribed: json['sub'] == true,
+      isLikedList: json['liked'] == true,
+      shared: json['shared'] == true,
+      sharedUsers: [
+        for (final u in json['users'] as List? ?? const []) ?SocialUserJson.fromJson(u),
+      ],
+    );
+  }
+}
+
 class ArtistRef {
   const ArtistRef(this.id, this.name);
 
@@ -292,6 +333,25 @@ class UserProfile {
 
   /// 0 为普通用户，其他值为各类会员。
   final int vipType;
+
+  Map<String, Object?> toJson() => {
+    'id': userId,
+    'name': nickname,
+    'avatar': ?avatarUrl,
+    'vip': vipType,
+  };
+
+  static UserProfile? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! int || name is! String) return null;
+    return UserProfile(
+      userId: id,
+      nickname: name,
+      avatarUrl: json['avatar'] as String?,
+      vipType: json['vip'] as int? ?? 0,
+    );
+  }
 }
 
 /// 网易云的音质档位，从低到高排列；[index] 越大越好。
@@ -350,6 +410,25 @@ class QualityInfo {
   /// 字节。
   final int size;
   final int? sampleRate;
+
+  Map<String, Object?> toJson() => {
+    'q': quality.level,
+    'br': bitrate,
+    'size': size,
+    'sr': ?sampleRate,
+  };
+
+  static QualityInfo? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final q = AudioQuality.fromLevel(json['q'] as String?);
+    if (q == null) return null;
+    return QualityInfo(
+      quality: q,
+      bitrate: json['br'] as int? ?? 0,
+      size: json['size'] as int? ?? 0,
+      sampleRate: json['sr'] as int?,
+    );
+  }
 }
 
 /// 取到的播放地址。[quality] 是服务端实际给的档位，可能低于请求的档位（版权或会员限制）。
@@ -455,6 +534,69 @@ class Lyrics {
   bool get isEmpty => lines.isEmpty;
   bool get hasTranslation => lines.any((l) => l.translation != null);
   bool get hasRomaji => lines.any((l) => l.romaji != null);
+
+  /// 存本地缓存用。时间都用毫秒。
+  Map<String, Object?> toJson() => {
+    'src': ?source?.name,
+    'word': wordSynced,
+    'lines': [for (final l in lines) _lineJson(l)],
+  };
+
+  static Lyrics? fromJson(Object? json) {
+    if (json is! Map || json['lines'] is! List) return null;
+    final lines = <LyricLine>[];
+    for (final l in json['lines'] as List) {
+      final line = _lineFrom(l);
+      if (line == null) return null;
+      lines.add(line);
+    }
+    return Lyrics(
+      lines: lines,
+      source: LyricSource.byName(json['src'] as String?),
+      wordSynced: json['word'] == true,
+    );
+  }
+
+  static Map<String, Object?> _lineJson(LyricLine l) => {
+    's': l.start.inMilliseconds,
+    'e': l.end.inMilliseconds,
+    'w': [
+      for (final w in l.words) [w.text, w.start.inMilliseconds, w.end.inMilliseconds, ?w.ruby],
+    ],
+    't': ?l.translation,
+    'r': ?l.romaji,
+    if (l.duet) 'd': true,
+    if (l.background case final bg?) 'bg': _lineJson(bg),
+  };
+
+  static LyricLine? _lineFrom(Object? json) {
+    if (json is! Map) return null;
+    final s = json['s'], e = json['e'], w = json['w'];
+    if (s is! int || e is! int || w is! List) return null;
+    final words = <LyricWord>[];
+    for (final x in w) {
+      if (x is! List || x.length < 3 || x[0] is! String || x[1] is! int || x[2] is! int) {
+        return null;
+      }
+      words.add(
+        LyricWord(
+          x[0] as String,
+          Duration(milliseconds: x[1] as int),
+          Duration(milliseconds: x[2] as int),
+          ruby: x.length > 3 ? x[3] as String? : null,
+        ),
+      );
+    }
+    return LyricLine(
+      start: Duration(milliseconds: s),
+      end: Duration(milliseconds: e),
+      words: words,
+      translation: json['t'] as String?,
+      romaji: json['r'] as String?,
+      duet: json['d'] == true,
+      background: json['bg'] == null ? null : _lineFrom(json['bg']),
+    );
+  }
 }
 
 /// 评论区属于哪类资源。网易云用 `前缀 + id` 作为评论区 id（threadId）。
@@ -609,6 +751,18 @@ class SocialUser {
     musician: musician,
     followeds: followeds,
   );
+}
+
+extension SocialUserJson on SocialUser {
+  /// 存本地缓存用，只存头像和名字这些显示用的信息。
+  Map<String, Object?> toJson() => {'id': userId, 'name': nickname, 'avatar': ?avatarUrl};
+
+  static SocialUser? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['id'], name = json['name'];
+    if (id is! int || name is! String) return null;
+    return SocialUser(userId: id, nickname: name, avatarUrl: json['avatar'] as String?);
+  }
 }
 
 /// 一页用户（关注 / 粉丝）。

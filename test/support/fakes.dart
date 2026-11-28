@@ -4,6 +4,8 @@ import 'package:flutter/painting.dart';
 import 'package:netease_client/api/netease_api.dart';
 import 'package:netease_client/app/services.dart';
 import 'package:netease_client/audio/audio_cache.dart';
+import 'package:netease_client/audio/listen_cache.dart';
+import 'package:netease_client/data/track_cache.dart';
 import 'package:netease_client/audio/audio_engine.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/state/account_controller.dart';
@@ -224,13 +226,20 @@ Future<({AppServices services, FakeEngine engine, FakeBackend backend})> fakeSer
   );
   final engine = FakeEngine();
   final backend = FakeBackend();
+  // 数据缓存只存内存；歌曲缓存没有目录：设置页能显示缓存选项，但不读写文件。
+  final data = DataCache();
+  final audioCache = AudioCache(
+    directory: Future.value(null),
+    limit: () => settings.audioCacheLimit,
+  );
   final services = AppServices(
     settings: settings,
     api: api,
-    account: AccountController(api: api, settings: settings),
-    player: PlayerController(engine: engine, backend: backend, settings: settings),
-    // 没有目录：设置页能显示缓存选项，但不读写文件。
-    audioCache: AudioCache(directory: Future.value(null), limit: () => settings.audioCacheLimit),
+    account: AccountController(api: api, settings: settings, data: data),
+    player: PlayerController(engine: engine, backend: backend, settings: settings, data: data),
+    audioCache: audioCache,
+    data: data,
+    listenCache: ListenCache(data: data)..audio = audioCache,
   );
   return (services: services, engine: engine, backend: backend);
 }

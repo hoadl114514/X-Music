@@ -12,6 +12,12 @@ import 'models.dart';
 abstract class TrackStore {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
+
+  /// 占用的字节数。
+  Future<int> usedBytes();
+
+  /// 全部删掉。
+  Future<void> clear();
 }
 
 /// 存在应用私有目录的 `track_cache/` 下。取不到目录（网页版、测试）时什么都不存。
@@ -56,6 +62,32 @@ class FileTrackStore implements TrackStore {
       // 缓存写不进去不影响使用。
     }
   }
+
+  @override
+  Future<int> usedBytes() async {
+    try {
+      final dir = await _directory();
+      if (dir == null) return 0;
+      var total = 0;
+      await for (final e in dir.list()) {
+        if (e is File) total += await e.length();
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  @override
+  Future<void> clear() async {
+    try {
+      final dir = await _directory();
+      if (dir == null) return;
+      await for (final e in dir.list()) {
+        if (e is File) await e.delete();
+      }
+    } catch (_) {}
+  }
 }
 
 class MemoryTrackStore implements TrackStore {
@@ -66,6 +98,70 @@ class MemoryTrackStore implements TrackStore {
 
   @override
   Future<void> write(String key, String value) async => data[key] = value;
+
+  @override
+  Future<int> usedBytes() async =>
+      data.values.fold<int>(0, (sum, v) => sum + utf8.encode(v).length);
+
+  @override
+  Future<void> clear() async => data.clear();
+}
+
+/// 页面数据的本地缓存：先给缓存，同时后台取最新的，有变化再发一次。
+///
+/// 和「我喜欢」歌单同一套存储，都算在「听歌缓存」里。
+class DataCache {
+  DataCache({TrackStore? store}) : store = store ?? MemoryTrackStore();
+
+  final TrackStore store;
+
+  /// 本次运行里读过 / 写过的 JSON 文本，切回来不用再读文件。
+  final _memory = <String, String>{};
+
+  /// 读 [key]；没有或格式不对（比如旧版本）时返回 null。
+  Future<T?> read<T>(String key, T? Function(Object? json) decode) async {
+    final raw = _memory[key] ?? await store.read(key);
+    if (raw == null) return null;
+    try {
+      final value = decode(jsonDecode(raw));
+      if (value != null) _memory[key] = raw;
+      return value;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 写 [key]。[json] 要能被 `jsonEncode` 编码。
+  Future<void> write(String key, Object? json) {
+    final raw = jsonEncode(json);
+    if (_memory[key] == raw) return Future.value();
+    _memory[key] = raw;
+    return store.write(key, raw);
+  }
+
+  /// 先发缓存（有的话，[force] 时跳过），再发 [fetch] 的结果；和缓存一样就不再发。
+  /// [fetch] 出错时，已经发过缓存的照样报错，由页面决定是只提示还是显示错误。
+  Stream<T> watch<T>(
+    String key, {
+    required Future<T> Function() fetch,
+    required Object? Function(T value) encode,
+    required T? Function(Object? json) decode,
+    bool force = false,
+  }) async* {
+    final cached = force ? null : await read(key, decode);
+    if (cached != null) yield cached;
+    final fresh = await fetch();
+    final json = encode(fresh);
+    final same = cached != null && _memory[key] == jsonEncode(json);
+    if (!same) yield fresh;
+    unawaited(write(key, json));
+  }
+
+  /// 删掉全部缓存（清空听歌缓存时用）。
+  Future<void> clear() async {
+    _memory.clear();
+    await store.clear();
+  }
 }
 
 /// 歌单歌曲：先给本地缓存，同时在后台和服务端比对增删。

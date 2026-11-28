@@ -100,7 +100,7 @@ void main() {
     await settle(tester);
     await tester.scrollUntilVisible(find.text('听歌缓存上限'), 200);
     expect(find.text('5 GB'), findsOneWidget);
-    expect(find.text('已用 0 B'), findsOneWidget);
+    expect(find.text('已用 0 B（歌曲 0 B · 图片 0 B · 数据 0 B）'), findsOneWidget);
 
     await tester.tap(find.text('听歌缓存上限'));
     await settle(tester);

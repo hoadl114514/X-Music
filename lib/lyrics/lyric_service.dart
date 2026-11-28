@@ -1,16 +1,25 @@
+import 'dart:async';
+
 import '../api/netease_api.dart';
 import '../data/models.dart';
+import '../data/track_cache.dart';
 import 'amll_lyrics.dart';
 import 'lyric_parser.dart';
 import 'qq_lyrics.dart';
 
 /// 按来源取歌词，结果按 (歌曲, 来源) 缓存。
 class LyricService {
-  LyricService({required this._netease, required this._qq, required this._amll});
+  LyricService({required this._netease, required this._qq, required this._amll, this._store});
 
   final NeteaseApi _netease;
   final QqLyrics _qq;
   final AmllLyrics _amll;
+
+  /// 本地缓存（算在听歌缓存里）。有歌词的结果存下来，下次不用联网。为 null 时只存内存。
+  final DataCache? _store;
+
+  /// 缓存格式版本。解析逻辑大改时加一，旧缓存自动作废。
+  static const _version = 1;
   final _cache = <(String, LyricSource), Lyrics>{};
   final _inFlight = <(String, LyricSource), Future<Lyrics>>{};
 
@@ -65,35 +74,55 @@ class LyricService {
     );
   }
 
-  Future<Lyrics> _load(Song song, LyricSource source) async => switch (source) {
-    LyricSource.netease => await _fromNetease(song),
-    LyricSource.qq => await _qq.fetch(song),
-    LyricSource.amll => await _withNeteaseRomaji(song, await _amll.fetch(song)),
-  };
+  Future<Lyrics> _load(Song song, LyricSource source) async {
+    final key = 'ly_${song.id}_${source.name}';
+    final cached = await _store?.read(key, (j) {
+      if (j is! Map || j['v'] != _version) return null;
+      return Lyrics.fromJson(j['l']);
+    });
+    if (cached != null) return cached;
+    var complete = true;
+    final lyrics = switch (source) {
+      LyricSource.netease => await _fromNetease(song),
+      LyricSource.qq => await _qq.fetch(song),
+      LyricSource.amll => await () async {
+        final (l, done) = await _withNeteaseRomaji(song, await _amll.fetch(song));
+        complete = done;
+        return l;
+      }(),
+    };
+    // 没歌词的不存：之后可能会有。罗马音没等到的也不存，下次再补。
+    if (!lyrics.isEmpty && complete) {
+      unawaited(_store?.write(key, {'v': _version, 'l': lyrics.toJson()}));
+    }
+    return lyrics;
+  }
 
   /// 等网易云罗马音的最长时间。超时就先不带罗马音，不让 AMLL 歌词干等。
   static const romajiWait = Duration(seconds: 4);
 
   /// AMLL 歌词自己没有罗马音时，从网易云拉取罗马音，按时间挂到最近的行上。
   /// 不在本地生成罗马音。网易云取不到时保持原样。
-  Future<Lyrics> _withNeteaseRomaji(Song song, Lyrics lyrics) async {
-    if (lyrics.isEmpty || lyrics.hasRomaji) return lyrics;
+  /// 返回的 bool 表示网易云有没有及时答复（没答复时结果不完整，不写缓存）。
+  Future<(Lyrics, bool)> _withNeteaseRomaji(Song song, Lyrics lyrics) async {
+    if (lyrics.isEmpty || lyrics.hasRomaji) return (lyrics, true);
     final Lyrics netease;
     try {
       netease = await _fetchFrom(song, LyricSource.netease).timeout(romajiWait);
     } catch (_) {
-      return lyrics;
+      return (lyrics, false);
     }
     final romaji = [
       for (final l in netease.lines)
         if (l.romaji case final r?) (l.start, r),
     ];
-    if (romaji.isEmpty) return lyrics;
-    return Lyrics(
+    if (romaji.isEmpty) return (lyrics, true);
+    final merged = Lyrics(
       lines: LyricParser.attachByTime(lyrics.lines, romaji, (l, r) => l.copyWith(romaji: r)),
       source: lyrics.source,
       wordSynced: lyrics.wordSynced,
     );
+    return (merged, true);
   }
 
   Future<Lyrics> _fromNetease(Song song) async {

@@ -10,6 +10,7 @@ import '../audio/audio_output.dart';
 import '../audio/flac_probe.dart';
 import '../data/models.dart';
 import '../data/retry.dart';
+import '../data/track_cache.dart';
 import '../lyrics/lyric_service.dart';
 import '../widgets/cover_palette.dart';
 import 'settings.dart';
@@ -96,6 +97,7 @@ class PlayerController extends ChangeNotifier {
     required this._backend,
     required this._settings,
     this.cache,
+    this.data,
     this.output,
     this.retryDelays = defaultRetryDelays,
   }) {
@@ -108,6 +110,27 @@ class PlayerController extends ChangeNotifier {
 
   /// 听歌缓存。为 null 时不缓存（测试）。
   final AudioCache? cache;
+
+  /// 音质列表、位深的本地缓存（也算在听歌缓存里）。为 null 时不缓存。
+  final DataCache? data;
+
+  /// 取音质列表：有缓存先用缓存，同时后台取最新的写回缓存。
+  Future<List<QualityInfo>> _fetchQualities(String songId) async {
+    final data = this.data;
+    final key = 'q_$songId';
+    List<QualityInfo>? decode(Object? j) =>
+        j is List ? [for (final x in j) ?QualityInfo.fromJson(x)] : null;
+    Future<List<QualityInfo>> fetch() async {
+      final q = await _backend.qualities(songId);
+      if (q.isNotEmpty) unawaited(data?.write(key, [for (final x in q) x.toJson()]));
+      return q;
+    }
+
+    final cached = await data?.read(key, decode);
+    if (cached == null || cached.isEmpty) return fetch();
+    unawaited(fetch().then((_) {}, onError: (Object _) {}));
+    return cached;
+  }
 
   /// 音频输出和网络类型的原生接口。为 null 时不区分移动网络、不设置输出（测试可传假的）。
   final AudioOutput? output;
@@ -325,8 +348,21 @@ class PlayerController extends ChangeNotifier {
     for (final q in todo) {
       _bitDepths[(song.id, q)] = null;
     }
+    final key = 'bits_${song.id}';
+    final saved =
+        await data?.read(key, (j) => j is Map ? j.cast<String, Object?>() : null) ?? const {};
+    final missing = <AudioQuality>[];
+    for (final q in todo) {
+      if (saved[q.level] case final int bits) {
+        _bitDepths[(song.id, q)] = bits;
+      } else {
+        missing.add(q);
+      }
+    }
+    if (missing.length < todo.length && current?.id == song.id) notifyListeners();
+    if (missing.isEmpty) return;
     await Future.wait([
-      for (final q in todo)
+      for (final q in missing)
         () async {
           try {
             final url = await _backend.songUrl(song.id, q);
@@ -340,6 +376,12 @@ class PlayerController extends ChangeNotifier {
           }
         }(),
     ]);
+    final found = {
+      ...saved,
+      for (final q in missing)
+        if (_bitDepths[(song.id, q)] case final int bits) q.level: bits,
+    };
+    if (found.length > saved.length) await data?.write(key, found);
   }
 
   /// 实际在放的音质。
@@ -779,7 +821,7 @@ class PlayerController extends ChangeNotifier {
       }
       if (changingSong || _qualities.isEmpty) {
         try {
-          _qualities = await _backend.qualities(song.id);
+          _qualities = await _fetchQualities(song.id);
         } on ApiException {
           _qualities = const []; // 取不到就直接按偏好请求，由服务端降级。
         }
@@ -878,7 +920,7 @@ class PlayerController extends ChangeNotifier {
   /// 放缓存时在后台取一下音质列表，给播放页切音质用。取不到就算了。
   Future<void> _loadQualities(Song song, int token) async {
     try {
-      final q = await _backend.qualities(song.id);
+      final q = await _fetchQualities(song.id);
       if (token != _token) return;
       _qualities = q;
       notifyListeners();

@@ -1,16 +1,74 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../api/cookies.dart';
 import '../api/netease_api.dart';
 import '../data/models.dart';
+import '../data/track_cache.dart';
 import 'settings.dart';
 
 /// 登录状态（只支持 Cookie 登录）、我的歌单和"喜欢"列表。
 class AccountController extends ChangeNotifier {
-  AccountController({required this._api, required this._settings});
+  AccountController({required this._api, required this._settings, this._data});
 
   final NeteaseApi _api;
   final AppSettings _settings;
+
+  /// 账号、歌单列表和喜欢列表的本地缓存（算在听歌缓存里）。为 null 时不缓存。
+  final DataCache? _data;
+
+  static const _cacheKey = 'account';
+  static const _cacheVersion = 1;
+  bool _saveScheduled = false;
+
+  /// 每次界面要刷新时顺便存一份（同一帧里多次变化只存一次）。
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    final data = _data;
+    if (data == null || _saveScheduled) return;
+    _saveScheduled = true;
+    scheduleMicrotask(() {
+      _saveScheduled = false;
+      final p = _profile;
+      unawaited(
+        data.write(
+          _cacheKey,
+          p == null
+              ? null
+              : {
+                  'v': _cacheVersion,
+                  'profile': p.toJson(),
+                  'playlists': [for (final x in _playlists) x.toJson()],
+                  'liked': _liked.toList(),
+                },
+        ),
+      );
+    });
+  }
+
+  /// 先把上次存的账号和歌单端上来，联网刷新前就能看到音乐库。
+  Future<void> _restoreCached() async {
+    final cached = await _data?.read(_cacheKey, (j) {
+      if (j is! Map || j['v'] != _cacheVersion) return null;
+      final profile = UserProfile.fromJson(j['profile']);
+      if (profile == null) return null;
+      return (
+        profile: profile,
+        playlists: [for (final x in j['playlists'] as List? ?? const []) ?PlaylistJson.fromJson(x)],
+        liked: {
+          for (final x in j['liked'] as List? ?? const [])
+            if (x is String) x,
+        },
+      );
+    });
+    if (cached == null) return;
+    _profile = cached.profile;
+    _playlists = cached.playlists;
+    _liked = cached.liked;
+    notifyListeners();
+  }
 
   UserProfile? _profile;
   List<Playlist> _playlists = const [];
@@ -154,10 +212,11 @@ class AccountController extends ChangeNotifier {
     final saved = parseCookie(_settings.cookie);
     if (!saved.containsKey('MUSIC_U')) return;
     _api.cookies = saved;
+    await _restoreCached();
     try {
       await _refresh();
     } catch (_) {
-      // 离线等情况：不清 Cookie，界面显示未登录。
+      // 离线等情况：不清 Cookie。有缓存时继续显示缓存，没有时界面显示未登录。
     }
   }
 

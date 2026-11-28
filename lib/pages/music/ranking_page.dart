@@ -62,10 +62,34 @@ class _RankListState extends State<_RankList> with AutomaticKeepAliveClientMixin
   @override
   bool get wantKeepAlive => true;
 
-  Future<List<Song>> _load() async {
-    final r = await AppScope.of(context).api.playRecord(widget.userId, weekly: widget.weekly);
-    _counts = [for (final e in r) e.playCount];
-    return [for (final e in r) e.song];
+  /// 先显示缓存（只存自己的），后台再取最新的。
+  Stream<List<Song>> _watch(bool force) {
+    final services = AppScope.of(context);
+    Future<List<({Song song, int playCount})>> fetch() =>
+        services.api.playRecord(widget.userId, weekly: widget.weekly);
+    final own = AccountScope.read(context).profile?.userId == widget.userId;
+    final records = own
+        ? services.data.watch(
+            'rank_${widget.userId}_${widget.weekly ? 'week' : 'all'}',
+            fetch: fetch,
+            encode: (r) => [
+              for (final e in r) {'song': e.song.toJson(), 'n': e.playCount},
+            ],
+            decode: (j) => j is List
+                ? [
+                    for (final e in j)
+                      if (e is Map)
+                        if (Song.fromJson(e['song']) case final song?)
+                          (song: song, playCount: e['n'] as int? ?? 0),
+                  ]
+                : null,
+            force: force,
+          )
+        : Stream.fromFuture(fetch());
+    return records.map((r) {
+      _counts = [for (final e in r) e.playCount];
+      return [for (final e in r) e.song];
+    });
   }
 
   @override
@@ -74,7 +98,7 @@ class _RankListState extends State<_RankList> with AutomaticKeepAliveClientMixin
     final label = widget.weekly ? '最近一周' : '所有时间';
     return TrackListView(
       reloadKey: widget.userId,
-      load: _load,
+      watch: _watch,
       queueTitle: '听歌排行 · $label',
       emptyText: '暂无记录（账号可能关闭了听歌排行）',
       trailingFor: (i) => i < _counts.length ? '${_counts[i]} 次' : null,
