@@ -137,8 +137,15 @@ class SettingsPage extends StatelessWidget {
 class _AppearanceTiles extends StatelessWidget {
   const _AppearanceTiles();
 
+  // 外层的 ListenableBuilder 只重建设置页的列表，这里是 const 子组件，不会跟着重建，
+  // 所以自己监听设置，否则开关点了不变，要退出重进才显示。
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: AppScope.of(context).settings,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     final settings = AppScope.of(context).settings;
     final supported = AppScope.dynamicColorSupported(context);
     final useDynamic = supported && settings.dynamicColor;
@@ -554,8 +561,15 @@ class _OutputTiles extends StatelessWidget {
     _ => Icons.speaker_rounded,
   };
 
+  // 外层的 ListenableBuilder 只重建设置页的列表，这里是 const 子组件，不会跟着重建，
+  // 所以自己监听设置，否则开关点了不变，要退出重进才显示。
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: AppScope.of(context).settings,
+    builder: (context, _) => _build(context),
+  );
+
+  Widget _build(BuildContext context) {
     final settings = AppScope.of(context).settings;
     final depth = settings.outputBitDepth;
     final fixedRate = depth.followsSourceRate;
