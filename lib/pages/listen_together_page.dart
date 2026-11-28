@@ -274,10 +274,13 @@ class _Member extends StatelessWidget {
 ///
 /// 不在房间里时只占一段空白，让播放控制区离底部留够距离。
 class ListenTogetherBar extends StatelessWidget {
-  const ListenTogetherBar({super.key});
+  const ListenTogetherBar({super.key, this.idleGap = defaultIdleGap});
 
-  /// 不在房间里时留的空白高度。
-  static const idleGap = 56.0;
+  /// 不在房间里时默认留的空白高度。
+  static const defaultIdleGap = 56.0;
+
+  /// 不在房间里时留的空白高度。播放控制收起时传 0，不留空白。
+  final double idleGap;
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +296,7 @@ class ListenTogetherBar extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 child: _BarBody(listen: listen),
               )
-            : const SizedBox(height: idleGap, width: double.infinity),
+            : SizedBox(height: idleGap, width: double.infinity),
       ),
     );
   }

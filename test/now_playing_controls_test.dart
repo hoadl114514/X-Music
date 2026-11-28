@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:netease_client/app/app.dart';
+import 'package:netease_client/pages/listen_together_page.dart';
 
 import 'support/fakes.dart';
 
@@ -33,23 +34,27 @@ void main() {
       }
     }
 
+    double gap() => tester.getSize(find.byType(ListenTogetherBar)).height;
     double factor() => tester.widget<AnimatedAlign>(find.byType(AnimatedAlign).last).heightFactor!;
 
     // 从歌词入口进来：在歌词页，控制收起。
     await tester.tap(find.byTooltip('歌词'));
     await settle();
     expect(factor(), 0);
+    expect(gap(), 0, reason: '不在一起听房间时底部不留空白');
 
     // 回到封面页：控制出现。
     final pages = find.byType(PageView);
     await tester.fling(pages, const Offset(400, 0), 1500);
     await settle();
     expect(factor(), 1);
+    expect(gap(), ListenTogetherBar.defaultIdleGap);
 
     // 到百科页：控制收起。
     await tester.fling(pages, const Offset(400, 0), 1500);
     await settle();
     expect(find.text('音乐百科'), findsOneWidget);
     expect(factor(), 0);
+    expect(gap(), 0);
   });
 }

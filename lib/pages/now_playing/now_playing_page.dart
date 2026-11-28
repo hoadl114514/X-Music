@@ -168,8 +168,9 @@ class _NowPlayingPageState extends State<NowPlayingPage> {
                     ),
                   ),
                 ),
-                // 在一起听房间里时显示一起听条；不在时留一段空白，单手拇指更好按。
-                const ListenTogetherBar(),
+                // 在一起听房间里时显示一起听条。不在房间时，封面页留一段空白方便拇指按；
+                // 百科页和歌词页没有播放控制，不留空白，内容一直铺到底。
+                ListenTogetherBar(idleGap: _controlsHidden ? 0 : ListenTogetherBar.defaultIdleGap),
               ],
             ),
           ),
