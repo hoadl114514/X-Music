@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -111,13 +112,19 @@ class _SleepSheet extends StatelessWidget {
 
   static const _options = [15, 30, 45, 60, 90];
 
+  /// 例如「1 小时 20 分钟」「45 分钟」。
+  static String describe(Duration d) {
+    final h = d.inHours, m = d.inMinutes % 60;
+    return [if (h > 0) '$h 小时', if (m > 0 || h == 0) '$m 分钟'].join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final player = PlayerScope.of(context);
+    final nav = Navigator.of(context);
     void set(Duration? d) {
-      Navigator.of(context).pop();
       player.setSleepTimer(d);
-      AppScope.toast(d == null ? '已取消定时关闭' : '${d.inMinutes} 分钟后暂停播放');
+      AppScope.toast(d == null ? '已取消定时关闭' : '${describe(d)}后暂停播放');
     }
 
     return SafeArea(
@@ -127,14 +134,66 @@ class _SleepSheet extends StatelessWidget {
           for (final m in _options)
             ListTile(
               title: Text('$m 分钟'),
-              onTap: () => set(Duration(minutes: m)),
+              onTap: () {
+                nav.pop();
+                set(Duration(minutes: m));
+              },
             ),
+          ListTile(
+            title: const Text('自定义…'),
+            onTap: () async {
+              nav.pop();
+              final d = await _pickCustom(nav.context);
+              if (d != null) set(d);
+            },
+          ),
           if (player.sleepAt != null)
             ListTile(
               title: Text('取消定时', style: TextStyle(color: context.colors.accent)),
-              onTap: () => set(null),
+              onTap: () {
+                nav.pop();
+                set(null);
+              },
             ),
           const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  /// 选小时和分钟，最短 1 分钟。取消时返回 null。
+  static Future<Duration?> _pickCustom(BuildContext context) {
+    var picked = const Duration(minutes: 30);
+    return showDialog<Duration>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('自定义定时关闭'),
+        content: SizedBox(
+          height: 216,
+          width: 300,
+          child: CupertinoTheme(
+            data: CupertinoThemeData(
+              brightness: Theme.of(context).brightness,
+              textTheme: CupertinoTextThemeData(
+                pickerTextStyle: TextStyle(fontSize: 21, color: context.colors.textPrimary),
+              ),
+            ),
+            child: CupertinoTimerPicker(
+              mode: CupertinoTimerPickerMode.hm,
+              initialTimerDuration: picked,
+              onTimerDurationChanged: (d) => picked = d,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              context,
+              picked < const Duration(minutes: 1) ? const Duration(minutes: 1) : picked,
+            ),
+            child: const Text('确定'),
+          ),
         ],
       ),
     );
