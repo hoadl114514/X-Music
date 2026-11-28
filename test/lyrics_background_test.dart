@@ -16,9 +16,16 @@ const _ttml =
     '</div></body></tt>';
 
 void main() {
-  Finder harmony() => find.byWidgetPredicate(
-    (w) => w is KaraokeText && w.words.map((x) => x.text).join() == 'harmony',
-  );
+  /// 背景人声是否展开显示。
+  bool shown(WidgetTester tester) {
+    final bg = find.byWidgetPredicate(
+      (w) => w is KaraokeText && w.words.map((x) => x.text).join() == 'harmony',
+    );
+    final fade = tester.widget<AnimatedCrossFade>(
+      find.ancestor(of: bg, matching: find.byType(AnimatedCrossFade)),
+    );
+    return fade.crossFadeState == CrossFadeState.showSecond;
+  }
 
   Future<void> settle(WidgetTester tester) async {
     for (var i = 0; i < 10; i++) {
@@ -26,7 +33,7 @@ void main() {
     }
   }
 
-  testWidgets('背景人声没唱到时隐藏，唱到时出现，唱过保持显示', (tester) async {
+  testWidgets('背景人声只在唱到时显示，没唱到和唱完都收起', (tester) async {
     tester.view.physicalSize = const Size(400, 860);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -42,15 +49,15 @@ void main() {
     await tester.tap(find.byTooltip('歌词'));
     await settle(tester);
 
-    expect(harmony(), findsNothing, reason: '还没到这一行');
+    expect(shown(tester), isFalse, reason: '还没到这一行');
     await f.services.player.seek(const Duration(milliseconds: 2500));
     await settle(tester);
-    expect(harmony(), findsNothing, reason: '这一行开始了，但背景人声还没开始');
+    expect(shown(tester), isFalse, reason: '这一行开始了，但背景人声还没开始');
     await f.services.player.seek(const Duration(milliseconds: 3500));
     await settle(tester);
-    expect(harmony(), findsOneWidget);
+    expect(shown(tester), isTrue);
     await f.services.player.seek(const Duration(milliseconds: 6500));
     await settle(tester);
-    expect(harmony(), findsOneWidget, reason: '唱过的行保持显示');
+    expect(shown(tester), isFalse, reason: '唱完后收起');
   });
 }

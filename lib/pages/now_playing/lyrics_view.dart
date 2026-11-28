@@ -38,7 +38,7 @@ class LyricsView extends StatefulWidget {
   State<LyricsView> createState() => _LyricsViewState();
 }
 
-class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMixin {
+class _LyricsViewState extends State<LyricsView> with TickerProviderStateMixin {
   static const _followPause = Duration(seconds: 3);
 
   /// 每帧更新的歌词时间，逐字填色直接监听它重绘，不用等 50ms 一次的进度、也不重建列表。
@@ -49,6 +49,15 @@ class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateM
   PlayerController? _player;
 
   final _scroll = ScrollController();
+
+  /// 跟随滚动的动画。每帧按当时的排版重新算目标位置，所以背景人声收起、展开
+  /// 导致上方高度变化时，当前行也会平滑停到锚点，不会跳。
+  late final _followAnim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
+  )..addListener(_onFollowFrame);
+  int _followTarget = -1;
+  double _followFrom = 0;
   List<GlobalKey> _keys = const [];
   Lyrics? _lyrics;
   int _lastActive = -2;
@@ -57,6 +66,7 @@ class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateM
   @override
   void dispose() {
     _ticker.dispose();
+    _followAnim.dispose();
     _clock.dispose();
     _scroll.dispose();
     super.dispose();
@@ -79,23 +89,35 @@ class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateM
     if (!force && DateTime.now().difference(_userScrolledAt) < _followPause) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
-      final target = _keys[active].currentContext?.findRenderObject();
-      if (target == null) return;
-      final offset = RenderAbstractViewport.of(target)
-          .getOffsetToReveal(target, widget.anchor)
-          .offset
-          .clamp(_scroll.position.minScrollExtent, _scroll.position.maxScrollExtent);
+      _followTarget = active;
       if (first) {
-        _scroll.jumpTo(offset);
-      } else {
-        _scroll.animateTo(
-          offset,
-          duration: const Duration(milliseconds: 700),
-          // 略带回弹，接近弹簧滚动的手感。
-          curve: Curves.easeOutBack,
-        );
+        final offset = _offsetFor(active);
+        if (offset != null) _scroll.jumpTo(offset);
+        return;
       }
+      _followFrom = _scroll.offset;
+      _followAnim.forward(from: 0);
     });
+  }
+
+  /// 让第 [index] 行停在锚点处的滚动位置；行还没排版时返回 null。
+  double? _offsetFor(int index) {
+    if (index < 0 || index >= _keys.length) return null;
+    final target = _keys[index].currentContext?.findRenderObject();
+    if (target == null || !target.attached) return null;
+    return RenderAbstractViewport.of(target)
+        .getOffsetToReveal(target, widget.anchor)
+        .offset
+        .clamp(_scroll.position.minScrollExtent, _scroll.position.maxScrollExtent);
+  }
+
+  void _onFollowFrame() {
+    if (!_scroll.hasClients) return;
+    final to = _offsetFor(_followTarget);
+    if (to == null) return;
+    // 略带回弹，接近弹簧滚动的手感。
+    final t = Curves.easeOutBack.transform(_followAnim.value);
+    _scroll.jumpTo(_followFrom + (to - _followFrom) * t);
   }
 
   @override
@@ -191,6 +213,8 @@ class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateM
           onNotification: (_) {
             final wasBrowsing = DateTime.now().difference(_userScrolledAt) < _followPause;
             _userScrolledAt = DateTime.now();
+            // 手动滚动时停下跟随动画，交给用户。
+            _followAnim.stop();
             // 开始手动滚动时立刻取消淡出（暂停时没有进度刷新来触发重建）。
             if (!wasBrowsing && widget.depth) setState(() {});
             return false;
@@ -313,27 +337,23 @@ class _LyricLine extends StatelessWidget {
             children: [
               _text(line, fontSize, dimmed),
               ...extras(line, 1),
-              // 背景人声：字号小一些，唱到时同样逐字填色。还没唱到时收起，唱到时展开浮现；
-              // 唱过的行保持展开，避免当前行上方的内容高度变化导致跳动。
+              // 背景人声：字号小一些，唱到时同样逐字填色。唱到时展开浮现，其余时候收起。
               if (bg != null)
-                AnimatedSize(
+                AnimatedCrossFade(
                   duration: const Duration(milliseconds: 420),
-                  curve: Curves.easeOutCubic,
+                  sizeCurve: Curves.easeOutCubic,
                   alignment: line.duet ? Alignment.topRight : Alignment.topLeft,
-                  child: AnimatedOpacity(
-                    opacity: _showBackground(bg) ? 1 : 0,
-                    duration: const Duration(milliseconds: 420),
-                    curve: Curves.easeOut,
-                    child: _showBackground(bg)
-                        ? Column(
-                            crossAxisAlignment: align,
-                            children: [
-                              SizedBox(height: fontSize * 0.25),
-                              _text(bg, fontSize * 0.62, dimmed),
-                              ...extras(bg, 0.8),
-                            ],
-                          )
-                        : const SizedBox(width: double.infinity),
+                  crossFadeState: _showBackground(bg)
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  firstChild: const SizedBox(width: double.infinity),
+                  secondChild: Column(
+                    crossAxisAlignment: align,
+                    children: [
+                      SizedBox(height: fontSize * 0.25),
+                      _text(bg, fontSize * 0.62, dimmed),
+                      ...extras(bg, 0.8),
+                    ],
                   ),
                 ),
             ],
@@ -343,12 +363,8 @@ class _LyricLine extends StatelessWidget {
     );
   }
 
-  /// 背景人声是否显示：唱过的行显示；当前行唱到背景人声时显示；还没唱到的不显示。
-  bool _showBackground(LyricLine bg) => switch (state) {
-    _LineState.past => true,
-    _LineState.active => position >= bg.start,
-    _LineState.future => false,
-  };
+  /// 背景人声只在当前行唱到它时显示，没唱到和唱完都收起。
+  bool _showBackground(LyricLine bg) => state == _LineState.active && position >= bg.start;
 
   /// 一行歌词正文。所有状态用同一次排版，当前行逐字填色。
   Widget _text(LyricLine l, double size, Color dimmed) {
