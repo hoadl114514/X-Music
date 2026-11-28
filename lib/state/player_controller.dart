@@ -7,6 +7,7 @@ import '../api/netease_api.dart';
 import '../audio/audio_cache.dart';
 import '../audio/audio_engine.dart';
 import '../audio/audio_output.dart';
+import '../audio/flac_probe.dart';
 import '../data/models.dart';
 import '../data/retry.dart';
 import '../lyrics/lyric_service.dart';
@@ -17,6 +18,9 @@ import 'settings.dart';
 abstract class PlaybackBackend {
   Future<List<QualityInfo>> qualities(String songId);
   Future<SongUrl?> songUrl(String songId, AudioQuality quality);
+
+  /// 读 [url] 指向的音频文件的位深（bit）。读不到或不是 FLAC 时返回 null。
+  Future<int?> bitDepth(String url);
 
   /// 取 [source] 的歌词；[fallback] 时没有就按 [order]（不给时用默认顺序）换其他来源。
   Future<Lyrics> lyrics(
@@ -34,10 +38,14 @@ abstract class PlaybackBackend {
 }
 
 class NeteaseBackend implements PlaybackBackend {
-  NeteaseBackend(this._api, this._lyrics);
+  NeteaseBackend(this._api, this._lyrics, {FlacProbe? probe}) : _probe = probe ?? FlacProbe();
 
   final NeteaseApi _api;
   final LyricService _lyrics;
+  final FlacProbe _probe;
+
+  @override
+  Future<int?> bitDepth(String url) => _probe.bitDepth(url);
 
   @override
   Future<List<QualityInfo>> qualities(String songId) => _api.qualities(songId);
@@ -287,6 +295,52 @@ class PlayerController extends ChangeNotifier {
 
   /// 这首歌提供的音质（从低到高）。取不到时为空。
   List<QualityInfo> get qualities => _qualities;
+
+  /// 当前这首歌各档音质的位深（bit），由 [probeBitDepths] 读出。
+  final _bitDepths = <(String, AudioQuality), int?>{};
+
+  /// 当前这首歌 [quality] 档的位深；还没读或读不到时为 null。
+  int? bitDepthOf(AudioQuality quality) {
+    final s = current;
+    return s == null ? null : _bitDepths[(s.id, quality)];
+  }
+
+  /// 可能是 FLAC 的档位：无损及以上，杜比除外。
+  static bool _maybeFlac(AudioQuality q) =>
+      q.index >= AudioQuality.lossless.index && q != AudioQuality.dolby;
+
+  /// 读当前这首歌各无损档的位深。打开音质列表时调用，每档只读一次。
+  ///
+  /// 网易云不给位深，需要先取该档地址，再读文件头。
+  /// 账号权益不够、服务端降了档时不显示，免得把低档的位深标到高档上。
+  Future<void> probeBitDepths() async {
+    final song = current;
+    if (song == null) return;
+    final todo = [
+      for (final info in _qualities)
+        if (_maybeFlac(info.quality) && !_bitDepths.containsKey((song.id, info.quality)))
+          info.quality,
+    ];
+    if (todo.isEmpty) return;
+    for (final q in todo) {
+      _bitDepths[(song.id, q)] = null;
+    }
+    await Future.wait([
+      for (final q in todo)
+        () async {
+          try {
+            final url = await _backend.songUrl(song.id, q);
+            if (url == null || url.quality != q || url.trial != null) return;
+            final bits = await _backend.bitDepth(url.url);
+            if (bits == null) return;
+            _bitDepths[(song.id, q)] = bits;
+            if (current?.id == song.id) notifyListeners();
+          } catch (_) {
+            _bitDepths.remove((song.id, q)); // 出错了下次打开再试。
+          }
+        }(),
+    ]);
+  }
 
   /// 实际在放的音质。
   AudioQuality? get quality => _quality;

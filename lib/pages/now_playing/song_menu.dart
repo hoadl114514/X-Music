@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -412,8 +414,20 @@ class _SongMenu extends StatelessWidget {
   }
 }
 
-class _QualitySheet extends StatelessWidget {
+class _QualitySheet extends StatefulWidget {
   const _QualitySheet();
+
+  @override
+  State<_QualitySheet> createState() => _QualitySheetState();
+}
+
+class _QualitySheetState extends State<_QualitySheet> {
+  @override
+  void initState() {
+    super.initState();
+    // 位深要读文件头，打开列表时才去读。
+    unawaited(PlayerScope.read(context).probeBitDepths());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -434,7 +448,7 @@ class _QualitySheet extends StatelessWidget {
           for (final info in options)
             ListTile(
               title: Text(info.quality.label),
-              subtitle: Text(_describe(info)),
+              subtitle: Text(_describe(info, player.bitDepthOf(info.quality))),
               trailing: info.quality == player.quality
                   ? Icon(Icons.check_rounded, color: context.colors.accent)
                   : null,
@@ -449,10 +463,11 @@ class _QualitySheet extends StatelessWidget {
     );
   }
 
-  static String _describe(QualityInfo i) => [
+  static String _describe(QualityInfo i, int? bits) => [
     if (i.bitrate > 0) '${(i.bitrate / 1000).round()} kbps',
     if (i.sampleRate case final sr? when sr > 0)
       '${(sr / 1000).toStringAsFixed(sr % 1000 == 0 ? 0 : 1)} kHz',
+    if (bits != null) '$bits bit',
     if (i.size > 0) '${(i.size / 1024 / 1024).toStringAsFixed(1)} MB',
   ].join(' · ');
 }

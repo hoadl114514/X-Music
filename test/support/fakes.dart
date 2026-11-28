@@ -132,6 +132,12 @@ class FakeBackend implements PlaybackBackend {
       QualityInfo(quality: q, bitrate: 320000, size: 1 << 20),
   ];
 
+  /// 地址 → 位深，模拟读 FLAC 文件头。
+  final bitDepths = <String, int>{};
+
+  @override
+  Future<int?> bitDepth(String url) async => bitDepths[url];
+
   @override
   Future<SongUrl?> songUrl(String songId, AudioQuality quality) async {
     urlRequests.add((songId, quality));
