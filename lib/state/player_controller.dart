@@ -17,7 +17,14 @@ import 'settings.dart';
 abstract class PlaybackBackend {
   Future<List<QualityInfo>> qualities(String songId);
   Future<SongUrl?> songUrl(String songId, AudioQuality quality);
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback});
+
+  /// 取 [source] 的歌词；[fallback] 时没有就按 [order]（不给时用默认顺序）换其他来源。
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  });
 
   /// 开始放一首歌：同步到网易云的「最近播放」。未登录时什么都不做。
   Future<void> startPlay(Song song, {String? sourceId});
@@ -39,8 +46,12 @@ class NeteaseBackend implements PlaybackBackend {
   Future<SongUrl?> songUrl(String songId, AudioQuality quality) => _api.songUrl(songId, quality);
 
   @override
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback}) =>
-      _lyrics.fetch(song, source, fallback: fallback);
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) => _lyrics.fetch(song, source, fallback: fallback, order: order);
 
   @override
   Future<void> startPlay(Song song, {String? sourceId}) async {
@@ -690,7 +701,9 @@ class PlayerController extends ChangeNotifier {
     }
     if (!keepLyrics) {
       _lyrics = Lyrics.empty;
-      unawaited(_loadLyrics(song, _settings.lyricSource, fallback: true));
+      unawaited(
+        _loadLyrics(song, _settings.lyricSource, fallback: true, order: _settings.lyricSources),
+      );
     }
     _playing = false;
     notifyListeners();
@@ -815,10 +828,15 @@ class PlayerController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> _loadLyrics(Song song, LyricSource source, {required bool fallback}) async {
+  Future<void> _loadLyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) async {
     _lyricsLoading = true;
     try {
-      final l = await _backend.lyrics(song, source, fallback: fallback);
+      final l = await _backend.lyrics(song, source, fallback: fallback, order: order);
       if (current?.id != song.id) return;
       if (l.isEmpty && !fallback) {
         _notices.add('${source.label}没有这首歌的歌词');

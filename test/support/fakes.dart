@@ -99,6 +99,9 @@ class FakeBackend implements PlaybackBackend {
   /// 这些歌只能试听。
   final trials = <String, ({Duration start, Duration end})>{};
   final lyricsMap = <(String, LyricSource), Lyrics>{};
+
+  /// 每次取歌词的参数：来源、是否自动换源、换源顺序。
+  final lyricRequests = <(LyricSource, bool, List<LyricSource>?)>[];
   final urlRequests = <(String, AudioQuality)>[];
   final scrobbles = <({String id, Duration listened, String? sourceId})>[];
   final starts = <String>[];
@@ -145,9 +148,18 @@ class FakeBackend implements PlaybackBackend {
   }
 
   @override
-  Future<Lyrics> lyrics(Song song, LyricSource source, {required bool fallback}) async {
-    final order = [source, if (fallback) ...LyricSource.values.where((s) => s != source)];
-    for (final s in order) {
+  Future<Lyrics> lyrics(
+    Song song,
+    LyricSource source, {
+    required bool fallback,
+    List<LyricSource>? order,
+  }) async {
+    lyricRequests.add((source, fallback, order));
+    final tries = [
+      source,
+      if (fallback) ...(order ?? LyricSource.values).where((s) => s != source),
+    ];
+    for (final s in tries) {
       if (lyricsMap[(song.id, s)] case final l?) return l;
     }
     return Lyrics.empty;

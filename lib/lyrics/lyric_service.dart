@@ -13,15 +13,21 @@ class LyricService {
   final AmllLyrics _amll;
   final _cache = <(String, LyricSource), Lyrics>{};
 
-  /// 自动换来源时的顺序。AMLL 按网易云 id 精确对应，排在要搜索匹配的 QQ 前面。
+  /// 没给顺序时自动换来源的顺序。AMLL 按网易云 id 精确对应，排在要搜索匹配的 QQ 前面。
   static const fallbackOrder = [LyricSource.netease, LyricSource.amll, LyricSource.qq];
 
-  /// 取 [preferred] 的歌词；没有时按 [fallbackOrder] 换其他来源。都没有返回 [Lyrics.empty]。
-  /// [fallback] 为 false 时只查 [preferred]。
-  Future<Lyrics> fetch(Song song, LyricSource preferred, {bool fallback = true}) async {
-    final order = [preferred, if (fallback) ...fallbackOrder.where((s) => s != preferred)];
+  /// 取 [preferred] 的歌词；没有时按 [order]（不给时用 [fallbackOrder]）换其他来源，
+  /// 只试 [order] 里有的来源。都没有返回 [Lyrics.empty]。[fallback] 为 false 时只查 [preferred]。
+  Future<Lyrics> fetch(
+    Song song,
+    LyricSource preferred, {
+    bool fallback = true,
+    List<LyricSource>? order,
+  }) async {
+    final rest = order ?? fallbackOrder;
+    final tries = [preferred, if (fallback) ...rest.where((s) => s != preferred)];
     Object? lastError;
-    for (final source in order) {
+    for (final source in tries) {
       try {
         final lyrics = await _fetchFrom(song, source);
         if (!lyrics.isEmpty) return lyrics;

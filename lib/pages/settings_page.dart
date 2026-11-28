@@ -12,6 +12,7 @@ import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/share.dart';
 import 'login_page.dart';
+import 'lyric_sources_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -79,24 +80,10 @@ class SettingsPage extends StatelessWidget {
           const _Header('歌词'),
           ListTile(
             leading: const Icon(Icons.lyrics_outlined),
-            title: const Text('默认歌词来源'),
-            // 三个来源放在右侧会把标题挤窄，放到副标题下面。
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('没有歌词时自动尝试其他来源'),
-                const SizedBox(height: 8),
-                SegmentedButton<LyricSource>(
-                  segments: [
-                    for (final s in LyricSource.values)
-                      ButtonSegment(value: s, label: Text(s.label)),
-                  ],
-                  selected: {settings.lyricSource},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (v) => settings.lyricSource = v.first,
-                ),
-              ],
-            ),
+            title: const Text('歌词来源'),
+            subtitle: Text('按顺序获取：${LyricSourcesPage.summary(settings.lyricSources)}'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => LyricSourcesPage.open(context),
           ),
           SwitchListTile(
             secondary: const Icon(Icons.translate_rounded),

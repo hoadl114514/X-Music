@@ -79,8 +79,8 @@ void main() {
     expect(find.text('输出通道'), findsOneWidget);
     expect(find.text('输出位深'), findsOneWidget);
     expect(find.text('输出采样率'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('默认歌词来源'), -200);
-    expect(find.text('默认歌词来源'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('歌词来源'), -200);
+    expect(find.text('按顺序获取：网易云 → AMLL → QQ 音乐'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('登录账号'), -200);
     await tester.tap(find.text('登录账号'));
     await settle(tester);
