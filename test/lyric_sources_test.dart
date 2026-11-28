@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:netease_client/app/app.dart';
 import 'package:netease_client/data/models.dart';
 import 'package:netease_client/pages/lyric_sources_page.dart';
+import 'package:netease_client/state/player_controller.dart';
 
 import 'support/fakes.dart';
 
@@ -52,6 +55,41 @@ void main() {
     await f.services.player.pause();
   });
 
+  testWidgets('改了顺序立即按新顺序重新取当前这首的歌词', (tester) async {
+    final f = await fakeServices();
+    f.backend.lyricsMap[('1', LyricSource.netease)] = karaoke();
+    f.backend.lyricsMap[('1', LyricSource.qq)] = karaoke(source: LyricSource.qq);
+    await f.services.player.playQueue([song('1')], title: 't');
+    await f.services.player.pause();
+    await tester.pump();
+    expect(f.services.player.lyrics.source, LyricSource.netease);
+
+    // AMLL 放第一但没有这首，接着是 QQ。
+    f.services.settings.lyricSourceOrder = [LyricSource.amll, LyricSource.qq, LyricSource.netease];
+    await f.services.player.reloadLyrics();
+    expect(f.backend.lyricRequests.last.$1, LyricSource.amll);
+    expect(f.services.player.lyrics.source, LyricSource.qq);
+  });
+
+  testWidgets('慢的旧请求晚回来时不覆盖新请求的结果', (tester) async {
+    final f = await fakeServices();
+    f.backend.lyricsMap[('1', LyricSource.netease)] = karaoke();
+    f.backend.lyricsMap[('1', LyricSource.qq)] = karaoke(source: LyricSource.qq);
+    final slow = Completer<void>();
+    f.backend.lyricsGate = (s) => s == LyricSource.netease ? slow.future : Future.value();
+    await f.services.player.playQueue([song('1')], title: 't');
+    await f.services.player.pause();
+    await tester.pump();
+
+    f.services.settings.lyricSourceOrder = [LyricSource.qq, LyricSource.netease, LyricSource.amll];
+    await f.services.player.reloadLyrics();
+    expect(f.services.player.lyrics.source, LyricSource.qq);
+
+    slow.complete();
+    await tester.pump();
+    expect(f.services.player.lyrics.source, LyricSource.qq);
+  });
+
   testWidgets('歌词来源页：开关和拖动排序', (tester) async {
     tester.view.physicalSize = const Size(400, 860);
     tester.view.devicePixelRatio = 1;
@@ -60,7 +98,10 @@ void main() {
     await tester.pumpWidget(
       AppScope(
         services: f.services,
-        child: const MaterialApp(home: LyricSourcesPage()),
+        child: PlayerScope(
+          controller: f.services.player,
+          child: const MaterialApp(home: LyricSourcesPage()),
+        ),
       ),
     );
     expect(find.text('AMLL'), findsOneWidget);

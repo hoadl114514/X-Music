@@ -202,6 +202,9 @@ class PlayerController extends ChangeNotifier {
 
   Lyrics _lyrics = Lyrics.empty;
   bool _lyricsLoading = false;
+
+  /// 每次取歌词加一。慢的旧请求回来时不覆盖新请求的结果。
+  int _lyricsRequest = 0;
   List<Color>? _coverPalette;
 
   Timer? _timer;
@@ -834,20 +837,22 @@ class PlayerController extends ChangeNotifier {
     required bool fallback,
     List<LyricSource>? order,
   }) async {
+    final request = ++_lyricsRequest;
+    bool stale() => request != _lyricsRequest || current?.id != song.id;
     _lyricsLoading = true;
     try {
       final l = await _backend.lyrics(song, source, fallback: fallback, order: order);
-      if (current?.id != song.id) return;
+      if (stale()) return;
       if (l.isEmpty && !fallback) {
         _notices.add('${source.label}没有这首歌的歌词');
         return;
       }
       _lyrics = l;
     } catch (_) {
-      if (current?.id != song.id) return;
+      if (stale()) return;
       if (!fallback) _notices.add('${source.label}歌词获取失败');
     } finally {
-      if (current?.id == song.id) {
+      if (!stale()) {
         _lyricsLoading = false;
         notifyListeners();
       }
@@ -981,6 +986,13 @@ class PlayerController extends ChangeNotifier {
     }
     if (current == null || q == _quality) return Future.value();
     return _load(_index, startAt: _position, autoplay: isPlaying, keepLyrics: true);
+  }
+
+  /// 歌词来源顺序或开关改了：按新顺序重新取当前这首的歌词（已取过的来源有缓存，很快）。
+  Future<void> reloadLyrics() async {
+    final s = current;
+    if (s == null) return;
+    await _loadLyrics(s, _settings.lyricSource, fallback: true, order: _settings.lyricSources);
   }
 
   /// 换一个歌词来源（只查这一个来源）。没有歌词时保留当前歌词并提示。

@@ -102,6 +102,9 @@ class FakeBackend implements PlaybackBackend {
 
   /// 每次取歌词的参数：来源、是否自动换源、换源顺序。
   final lyricRequests = <(LyricSource, bool, List<LyricSource>?)>[];
+
+  /// 设置后，取歌词先等它返回的 Future（模拟慢请求）。
+  Future<void> Function(LyricSource source)? lyricsGate;
   final urlRequests = <(String, AudioQuality)>[];
   final scrobbles = <({String id, Duration listened, String? sourceId})>[];
   final starts = <String>[];
@@ -155,6 +158,7 @@ class FakeBackend implements PlaybackBackend {
     List<LyricSource>? order,
   }) async {
     lyricRequests.add((source, fallback, order));
+    if (lyricsGate case final gate?) await gate(source);
     final tries = [
       source,
       if (fallback) ...(order ?? LyricSource.values).where((s) => s != source),

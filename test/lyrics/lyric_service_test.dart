@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -66,6 +67,71 @@ void main() {
     final l = await _service(netease, ttml).fetch(_song, LyricSource.amll, fallback: false);
     expect(l.lines.single.romaji, isNull);
     expect(l.lines.single.text, '星');
+  });
+
+  test('按给定顺序换源：AMLL 没有时换到下一个', () async {
+    final netease = _Netease({'lrc': '[00:01.00]网易云'});
+    final service = LyricService(
+      netease: netease,
+      qq: QqLyrics(client: MockClient((_) async => http.Response('', 500))),
+      amll: AmllLyrics(client: MockClient((_) async => http.Response('lyric not found', 404))),
+    );
+    final l = await service.fetch(
+      _song,
+      LyricSource.amll,
+      order: [LyricSource.amll, LyricSource.netease, LyricSource.qq],
+    );
+    expect(l.source, LyricSource.netease);
+    expect(l.lines.single.text, '网易云');
+  });
+
+  test('AMLL 出错（如超时、服务异常）时同样换到下一个', () async {
+    final netease = _Netease({'lrc': '[00:01.00]网易云'});
+    final service = LyricService(
+      netease: netease,
+      qq: QqLyrics(client: MockClient((_) async => http.Response('', 500))),
+      amll: AmllLyrics(client: MockClient((_) async => http.Response('oops', 502))),
+    );
+    final l = await service.fetch(
+      _song,
+      LyricSource.amll,
+      order: [LyricSource.amll, LyricSource.netease],
+    );
+    expect(l.source, LyricSource.netease);
+  });
+
+  test('前面的来源卡住时，后面的来源已经同时在取，不用排队等', () async {
+    final netease = _Netease({'lrc': '[00:01.00]网易云'});
+    final hang = Completer<http.Response>();
+    final service = LyricService(
+      netease: netease,
+      qq: QqLyrics(client: MockClient((_) async => http.Response('', 500))),
+      amll: AmllLyrics(client: MockClient((_) => hang.future)),
+    );
+    final result = service.fetch(
+      _song,
+      LyricSource.amll,
+      order: [LyricSource.amll, LyricSource.netease],
+    );
+    // 网易云已经同时发出请求，不用等 AMLL 回来。
+    await pumpEventQueue();
+    expect(netease.calls, 1);
+    hang.complete(http.Response('lyric not found', 404));
+    final l = await result;
+    expect(l.source, LyricSource.netease);
+  });
+
+  test('AMLL 取罗马音和网易云换源共用同一个请求', () async {
+    final netease = _Netease({'lrc': '[00:01.00]星', 'romalrc': '[00:01.00]hoshi'});
+    const ttml =
+        '<tt><body><div><p begin="1" end="2"><span begin="1" end="2">星</span></p></div></body></tt>';
+    final l = await _service(
+      netease,
+      ttml,
+    ).fetch(_song, LyricSource.amll, order: [LyricSource.amll, LyricSource.netease]);
+    expect(l.source, LyricSource.amll);
+    expect(l.lines.single.romaji, 'hoshi');
+    expect(netease.calls, 1);
   });
 
   test('自动换源顺序：网易云 → AMLL → QQ', () {

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app/app.dart';
 import '../data/models.dart';
+import '../state/player_controller.dart';
 import '../theme/app_theme.dart';
 
 /// 歌词来源：拖动调整自动获取的先后顺序，开关决定是否参与自动获取。
@@ -19,6 +22,9 @@ class LyricSourcesPage extends StatelessWidget {
 
   /// 顺序摘要，用在设置页，比如「网易云 → AMLL → QQ 音乐」。
   static String summary(List<LyricSource> sources) => sources.map((s) => s.label).join(' → ');
+
+  /// 改完立即对当前这首生效。
+  static void _apply(BuildContext context) => unawaited(PlayerScope.read(context).reloadLyrics());
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +51,7 @@ class LyricSourcesPage extends StatelessWidget {
               final next = [...order];
               next.insert(to, next.removeAt(from));
               settings.lyricSourceOrder = next;
+              _apply(context);
             },
             children: [
               for (final (i, s) in order.indexed)
@@ -76,7 +83,10 @@ class LyricSourcesPage extends StatelessWidget {
                         // 至少保留一个打开的来源。
                         onChanged: !off.contains(s) && enabledCount <= 1
                             ? null
-                            : (v) => settings.setLyricSourceEnabled(s, v),
+                            : (v) {
+                                settings.setLyricSourceEnabled(s, v);
+                                _apply(context);
+                              },
                       ),
                       ReorderableDragStartListener(
                         index: i,

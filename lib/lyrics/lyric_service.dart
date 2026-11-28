@@ -12,12 +12,16 @@ class LyricService {
   final QqLyrics _qq;
   final AmllLyrics _amll;
   final _cache = <(String, LyricSource), Lyrics>{};
+  final _inFlight = <(String, LyricSource), Future<Lyrics>>{};
 
   /// 没给顺序时自动换来源的顺序。AMLL 按网易云 id 精确对应，排在要搜索匹配的 QQ 前面。
   static const fallbackOrder = [LyricSource.netease, LyricSource.amll, LyricSource.qq];
 
   /// 取 [preferred] 的歌词；没有时按 [order]（不给时用 [fallbackOrder]）换其他来源，
   /// 只试 [order] 里有的来源。都没有返回 [Lyrics.empty]。[fallback] 为 false 时只查 [preferred]。
+  ///
+  /// 各来源同时请求，再按顺序取第一个有歌词的。这样前面的来源慢或超时，
+  /// 后面的来源不用排队等，总耗时最多是最慢的那一个。
   Future<Lyrics> fetch(
     Song song,
     LyricSource preferred, {
@@ -26,10 +30,15 @@ class LyricService {
   }) async {
     final rest = order ?? fallbackOrder;
     final tries = [preferred, if (fallback) ...rest.where((s) => s != preferred)];
+    final pending = [for (final s in tries) _fetchFrom(song, s)];
+    // 先挂上错误处理，排在后面的来源先失败时不会变成未处理的异常。
+    for (final f in pending) {
+      f.ignore();
+    }
     Object? lastError;
-    for (final source in tries) {
+    for (final f in pending) {
       try {
-        final lyrics = await _fetchFrom(song, source);
+        final lyrics = await f;
         if (!lyrics.isEmpty) return lyrics;
       } catch (e) {
         lastError = e;
@@ -39,17 +48,31 @@ class LyricService {
     return Lyrics.empty;
   }
 
-  Future<Lyrics> _fetchFrom(Song song, LyricSource source) async {
+  /// 同一首歌同一来源只发一次请求：请求中的共用同一个 Future，成功后缓存，失败后下次重试。
+  Future<Lyrics> _fetchFrom(Song song, LyricSource source) {
     final key = (song.id, source);
-    if (_cache[key] case final cached?) return cached;
-    final lyrics = switch (source) {
-      LyricSource.netease => await _fromNetease(song),
-      LyricSource.qq => await _qq.fetch(song),
-      LyricSource.amll => await _withNeteaseRomaji(song, await _amll.fetch(song)),
-    };
-    _cache[key] = lyrics;
-    return lyrics;
+    if (_cache[key] case final cached?) return Future.value(cached);
+    return _inFlight[key] ??= _load(song, source).then(
+      (lyrics) {
+        _cache[key] = lyrics;
+        _inFlight.remove(key);
+        return lyrics;
+      },
+      onError: (Object e, StackTrace s) {
+        _inFlight.remove(key);
+        Error.throwWithStackTrace(e, s);
+      },
+    );
   }
+
+  Future<Lyrics> _load(Song song, LyricSource source) async => switch (source) {
+    LyricSource.netease => await _fromNetease(song),
+    LyricSource.qq => await _qq.fetch(song),
+    LyricSource.amll => await _withNeteaseRomaji(song, await _amll.fetch(song)),
+  };
+
+  /// 等网易云罗马音的最长时间。超时就先不带罗马音，不让 AMLL 歌词干等。
+  static const romajiWait = Duration(seconds: 4);
 
   /// AMLL 歌词自己没有罗马音时，从网易云拉取罗马音，按时间挂到最近的行上。
   /// 不在本地生成罗马音。网易云取不到时保持原样。
@@ -57,7 +80,7 @@ class LyricService {
     if (lyrics.isEmpty || lyrics.hasRomaji) return lyrics;
     final Lyrics netease;
     try {
-      netease = await _fetchFrom(song, LyricSource.netease);
+      netease = await _fetchFrom(song, LyricSource.netease).timeout(romajiWait);
     } catch (_) {
       return lyrics;
     }
