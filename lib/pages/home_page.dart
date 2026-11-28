@@ -828,6 +828,9 @@ class _PersonalFmCard extends StatelessWidget {
     final picked = await showModalBottomSheet<FmMode>(
       context: context,
       showDragHandle: true,
+      // 默认最高只到屏幕的 9/16，选项多时下面的看不到；放开后按内容撑高，最多到状态栏下面。
+      isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => SafeArea(
         child: SingleChildScrollView(
           child: Column(
