@@ -310,6 +310,11 @@ class PlayerController extends ChangeNotifier {
   /// 用于歌词对齐的时间点：叠加偏移；试听片段换算回整首歌的时间。
   Duration get lyricPosition => _position + (_trial?.start ?? Duration.zero) + _lyricOffset;
 
+  /// 同 [lyricPosition]，但播放时直接读引擎的实时位置（引擎按时钟推算），
+  /// 比 50ms 一次的进度更细。给逐时间每帧取值的动画用，比如逐字填色。
+  Duration get liveLyricPosition =>
+      (_playing ? _engine.position : _position) + (_trial?.start ?? Duration.zero) + _lyricOffset;
+
   /// 当前所在歌词行；还没到第一行时返回 -1。
   int get activeLyricIndex {
     final lines = _lyrics.lines;

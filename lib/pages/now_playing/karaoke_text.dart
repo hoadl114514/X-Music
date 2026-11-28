@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -23,6 +24,7 @@ class KaraokeText extends LeafRenderObjectWidget {
     required this.color,
     required this.karaoke,
     required this.position,
+    this.clock,
     this.dimColor = const Color(0x61FFFFFF),
     this.litColor = const Color(0xFFFFFFFF),
     this.textAlign = TextAlign.left,
@@ -33,6 +35,9 @@ class KaraokeText extends LeafRenderObjectWidget {
   final Color color;
   final bool karaoke;
   final Duration position;
+
+  /// 每帧更新的时间。给了就用它逐帧重绘填色，[position] 只作后备。
+  final ValueListenable<Duration>? clock;
   final Color dimColor;
   final Color litColor;
   final TextAlign textAlign;
@@ -44,6 +49,7 @@ class KaraokeText extends LeafRenderObjectWidget {
     color: color,
     karaoke: karaoke,
     position: position,
+    clock: clock,
     dimColor: dimColor,
     litColor: litColor,
     textAlign: textAlign,
@@ -59,6 +65,7 @@ class KaraokeText extends LeafRenderObjectWidget {
       ..color = color
       ..karaoke = karaoke
       ..position = position
+      ..clock = clock
       ..dimColor = dimColor
       ..litColor = litColor
       ..textAlign = textAlign
@@ -74,6 +81,7 @@ class RenderKaraokeText extends RenderBox {
     required this._color,
     required this._karaoke,
     required this._position,
+    this._clock,
     required this._dimColor,
     required this._litColor,
     required this._textAlign,
@@ -117,6 +125,31 @@ class RenderKaraokeText extends RenderBox {
     if (v == _position) return;
     _position = v;
     if (_karaoke) markNeedsPaint();
+  }
+
+  ValueListenable<Duration>? _clock;
+  set clock(ValueListenable<Duration>? v) {
+    if (identical(v, _clock)) return;
+    if (attached) _clock?.removeListener(_onClock);
+    _clock = v;
+    if (attached) _clock?.addListener(_onClock);
+    markNeedsPaint();
+  }
+
+  void _onClock() {
+    if (_karaoke) markNeedsPaint();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _clock?.addListener(_onClock);
+  }
+
+  @override
+  void detach() {
+    _clock?.removeListener(_onClock);
+    super.detach();
   }
 
   Color _dimColor;
@@ -312,7 +345,7 @@ class RenderKaraokeText extends RenderBox {
       ..textDirection = _textDirection;
   }
 
-  double _progress(LyricWord w) => w.progressAt(_position);
+  double _progress(LyricWord w) => w.progressAt(_clock?.value ?? _position);
 
   /// 正在唱的字上浮的距离。
   double _lift(double p) => -0.08 * _fontSize * Curves.easeOut.transform(p.clamp(0.0, 1.0));

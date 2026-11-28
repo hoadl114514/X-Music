@@ -93,6 +93,29 @@ void main() {
     expect(ruby.wordBoxes[0].single.left, lessThan(ruby.wordBoxes[1].single.left));
   });
 
+  testWidgets('逐帧时钟变化时只重绘，不重新排版', (tester) async {
+    final clock = ValueNotifier(Duration.zero);
+    addTearDown(clock.dispose);
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: KaraokeText(
+          words: english,
+          style: const TextStyle(fontSize: 20),
+          color: Colors.white,
+          karaoke: true,
+          position: Duration.zero,
+          clock: clock,
+        ),
+      ),
+    );
+    final r = tester.renderObject<RenderKaraokeText>(find.byType(KaraokeText));
+    expect(r.debugNeedsPaint, isFalse);
+    clock.value = const Duration(milliseconds: 150);
+    expect(r.debugNeedsPaint, isTrue);
+    expect(r.debugNeedsLayout, isFalse);
+  });
+
   testWidgets('靠右对齐时撑满宽度，字贴右边', (tester) async {
     final r = await _pump(tester, [_w('右', 0)], width: 300, align: TextAlign.right);
     expect(r.size.width, 300);

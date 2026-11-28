@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -37,8 +38,15 @@ class LyricsView extends StatefulWidget {
   State<LyricsView> createState() => _LyricsViewState();
 }
 
-class _LyricsViewState extends State<LyricsView> {
+class _LyricsViewState extends State<LyricsView> with SingleTickerProviderStateMixin {
   static const _followPause = Duration(seconds: 3);
+
+  /// 每帧更新的歌词时间，逐字填色直接监听它重绘，不用等 50ms 一次的进度、也不重建列表。
+  final _clock = ValueNotifier(Duration.zero);
+  late final _ticker = createTicker((_) {
+    if (_player case final p?) _clock.value = p.liveLyricPosition;
+  });
+  PlayerController? _player;
 
   final _scroll = ScrollController();
   List<GlobalKey> _keys = const [];
@@ -48,6 +56,8 @@ class _LyricsViewState extends State<LyricsView> {
 
   @override
   void dispose() {
+    _ticker.dispose();
+    _clock.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -101,6 +111,14 @@ class _LyricsViewState extends State<LyricsView> {
     final lyrics = player.lyrics;
     final lines = lyrics.lines;
     _syncKeys(lyrics);
+    _player = player;
+    // 播放逐字歌词时逐帧推进；暂停或逐行歌词时不占用每一帧。
+    if (player.isPlaying && lyrics.wordSynced) {
+      if (!_ticker.isActive) _ticker.start();
+    } else {
+      if (_ticker.isActive) _ticker.stop();
+      _clock.value = player.lyricPosition;
+    }
     final active = player.activeLyricIndex;
     // 上一句还没唱完时，界面停在上一句，唱完再滚到下一句。
     final focus = lyricFocusIndex(lyrics, active, player.lyricPosition);
@@ -144,6 +162,7 @@ class _LyricsViewState extends State<LyricsView> {
                       ? _LineState.past
                       : _LineState.future,
                   position: player.lyricPosition,
+                  clock: _clock,
                   fontSize: widget.fontSize,
                   wordSynced: lyrics.wordSynced,
                   showTranslation: showTranslation,
@@ -216,6 +235,7 @@ class _LyricLine extends StatelessWidget {
     required this.line,
     required this.state,
     required this.position,
+    required this.clock,
     required this.fontSize,
     required this.wordSynced,
     required this.showTranslation,
@@ -228,6 +248,9 @@ class _LyricLine extends StatelessWidget {
   final LyricLine line;
   final _LineState state;
   final Duration position;
+
+  /// 每帧的歌词时间，逐字填色用。
+  final ValueListenable<Duration> clock;
   final double fontSize;
 
   /// 逐行歌词时当前行整行点亮，不做逐字填色。
@@ -312,6 +335,7 @@ class _LyricLine extends StatelessWidget {
       color: active ? _sung : dimmed,
       karaoke: active && wordSynced,
       position: position,
+      clock: clock,
       dimColor: _dim,
       litColor: _sung,
       textAlign: line.duet ? TextAlign.right : TextAlign.left,
