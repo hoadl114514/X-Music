@@ -84,6 +84,7 @@ class PlayerController extends ChangeNotifier {
     _subs = [
       _engine.completed.listen((_) => _onCompleted()),
       _engine.errors.listen(_onEngineError),
+      _engine.playingChanges.listen(_onEnginePlaying),
     ];
   }
 
@@ -123,6 +124,15 @@ class PlayerController extends ChangeNotifier {
     _appliedFormat = format;
     if (previous != null && previous != format) await _rebuildEngine();
     return result;
+  }
+
+  /// 和其他应用同时播放。改了要重建播放器，当前歌曲从原位置接着放。
+  bool get mixWithOthers => _settings.mixWithOthers;
+
+  Future<void> setMixWithOthers(bool v) async {
+    if (v == _settings.mixWithOthers) return;
+    _settings.mixWithOthers = v;
+    await _rebuildEngine();
   }
 
   Future<void> _rebuildEngine() async {
@@ -887,6 +897,21 @@ class PlayerController extends ChangeNotifier {
       _retryTimer = null;
       unawaited(_load(_index, startAt: _position, autoplay: _wantPlay, keepLyrics: true));
     });
+  }
+
+  /// 内核自己暂停 / 继续了（被其他应用打断、焦点恢复、拔耳机）：界面和通知栏跟着改。
+  /// 不同步的话会显示播放中但没有声音。
+  void _onEnginePlaying(bool playing) {
+    // 加载中内核本来就是暂停的，加载完由 _load 决定放不放。
+    if (_loading || !_ready || current == null || playing == _playing) return;
+    _playing = playing;
+    if (playing) {
+      _startTicker();
+    } else {
+      _stopTicker();
+      _position = _engine.position;
+    }
+    notifyListeners();
   }
 
   void _fail(String message) {

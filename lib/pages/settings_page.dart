@@ -621,6 +621,13 @@ class _OutputTiles extends StatelessWidget {
             _apply(context);
           },
         ),
+        SwitchListTile(
+          secondary: const Icon(Icons.queue_music_rounded),
+          title: const Text('与其他应用同时播放'),
+          subtitle: const Text('其他应用出声时不暂停，也不打断其他应用。拔耳机不会自动暂停'),
+          value: settings.mixWithOthers,
+          onChanged: (v) => PlayerScope.read(context).setMixWithOthers(v),
+        ),
       ],
     );
   }

@@ -39,6 +39,7 @@ class AppSettings extends ChangeNotifier {
   static const _kOutputBitDepth = 'output_bit_depth';
   static const _kOutputSampleRate = 'output_sample_rate';
   static const _kUsbExclusive = 'usb_exclusive';
+  static const _kMixWithOthers = 'mix_with_others';
   static const _kSharedPlaylists = 'shared_playlists';
 
   /// 搜索历史最多保留几条。
@@ -101,6 +102,10 @@ class AppSettings extends ChangeNotifier {
   /// USB DAC 独占（bit-perfect）。
   bool get usbExclusive => _prefs.getBool(_kUsbExclusive) ?? false;
   set usbExclusive(bool v) => _set(() => _prefs.setBool(_kUsbExclusive, v));
+
+  /// 和其他应用同时播放：不申请音频焦点，别的应用出声时不暂停。
+  bool get mixWithOthers => _prefs.getBool(_kMixWithOthers) ?? false;
+  set mixWithOthers(bool v) => _set(() => _prefs.setBool(_kMixWithOthers, v));
 
   /// 默认歌词来源。取不到时自动换另一个来源。
   LyricSource get lyricSource =>

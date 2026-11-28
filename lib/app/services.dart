@@ -42,9 +42,9 @@ class AppServices {
     final lyrics = LyricService(netease: api, qq: QqLyrics());
     final audioCache = AudioCache.system(limit: () => settings.audioCacheLimit);
     unawaited(audioCache.init());
-    await JustAudioEngine.configureSession();
+    await JustAudioEngine.configureSession(mixWithOthers: settings.mixWithOthers);
     final player = PlayerController(
-      engine: JustAudioEngine(),
+      engine: JustAudioEngine(mixWithOthers: () => settings.mixWithOthers),
       backend: NeteaseBackend(api, lyrics),
       settings: settings,
       cache: audioCache,
