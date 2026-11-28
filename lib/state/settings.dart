@@ -39,6 +39,7 @@ class AppSettings extends ChangeNotifier {
   static const _kOutputBitDepth = 'output_bit_depth';
   static const _kOutputSampleRate = 'output_sample_rate';
   static const _kUsbExclusive = 'usb_exclusive';
+  static const _kMixWithOthers = 'mix_with_others';
   static const _kSharedPlaylists = 'shared_playlists';
 
   /// 搜索历史最多保留几条。
@@ -133,6 +134,10 @@ class AppSettings extends ChangeNotifier {
   /// 登录后把听过的歌上报给网易云，同步到官方客户端的「最近播放」。
   bool get syncRecentPlays => _prefs.getBool(_kSyncRecent) ?? true;
   set syncRecentPlays(bool v) => _set(() => _prefs.setBool(_kSyncRecent, v));
+
+  /// 和其他应用同时播放：不申请音频焦点，别的应用出声时不暂停。
+  bool get mixWithOthers => _prefs.getBool(_kMixWithOthers) ?? false;
+  set mixWithOthers(bool v) => _set(() => _prefs.setBool(_kMixWithOthers, v));
 
   /// 上次选的播放模式（`PlayMode.name`：list / shuffle / one），没选过为 null。
   String? get playMode => _prefs.getString(_kPlayMode);
