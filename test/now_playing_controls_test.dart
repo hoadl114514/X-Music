@@ -42,6 +42,14 @@ void main() {
     await settle();
     expect(factor(), 0);
     expect(gap(), 0, reason: '不在一起听房间时底部不留空白');
+    // 标题旁的喜欢、收藏换成上一首、播放、下一首。
+    expect(find.byTooltip('收藏到歌单').hitTestable(), findsNothing);
+    expect(find.byTooltip('上一首').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('下一首').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('播放').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('下一首').hitTestable());
+    await settle();
+    expect(f.services.player.current!.id, '2');
 
     // 回到封面页：控制出现。
     final pages = find.byType(PageView);
@@ -49,6 +57,7 @@ void main() {
     await settle();
     expect(factor(), 1);
     expect(gap(), ListenTogetherBar.defaultIdleGap);
+    expect(find.byTooltip('收藏到歌单').hitTestable(), findsOneWidget);
 
     // 到百科页：控制收起。
     await tester.fling(pages, const Offset(400, 0), 1500);

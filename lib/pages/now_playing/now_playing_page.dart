@@ -484,20 +484,36 @@ class _TitleRow extends StatelessWidget {
             ),
           ),
         ),
-        LikeButton(
-          songId: song.id,
-          size: large ? 44 : 40,
-          iconSize: large ? 26 : 24,
-          color: Colors.white,
-        ),
-        RoundIconButton(
-          icon: Icons.playlist_add_rounded,
-          tooltip: '收藏到歌单',
-          color: Colors.white,
-          size: large ? 44 : 40,
-          iconSize: large ? 24 : 22,
-          onPressed: () => showAddToPlaylistSheet(context, song),
-        ),
+        // 封面页：喜欢、收藏到歌单。百科页和歌词页没有下面的播放控制，换成上一首、播放、下一首。
+        if (large) ...[
+          LikeButton(songId: song.id, size: 44, iconSize: 26, color: Colors.white),
+          RoundIconButton(
+            icon: Icons.playlist_add_rounded,
+            tooltip: '收藏到歌单',
+            color: Colors.white,
+            size: 44,
+            iconSize: 24,
+            onPressed: () => showAddToPlaylistSheet(context, song),
+          ),
+        ] else ...[
+          RoundIconButton(
+            icon: Icons.skip_previous_rounded,
+            tooltip: '上一首',
+            color: Colors.white,
+            size: 40,
+            iconSize: 28,
+            onPressed: PlayerScope.read(context).previous,
+          ),
+          const PlayPauseButton(size: 44),
+          RoundIconButton(
+            icon: Icons.skip_next_rounded,
+            tooltip: '下一首',
+            color: Colors.white,
+            size: 40,
+            iconSize: 28,
+            onPressed: PlayerScope.read(context).next,
+          ),
+        ],
       ],
     );
   }
