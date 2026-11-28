@@ -102,7 +102,9 @@ class _LyricsViewState extends State<LyricsView> {
     final lines = lyrics.lines;
     _syncKeys(lyrics);
     final active = player.activeLyricIndex;
-    _follow(active);
+    // 上一句还没唱完时，界面停在上一句，唱完再滚到下一句。
+    final focus = lyricFocusIndex(lyrics, active, player.lyricPosition);
+    _follow(focus);
 
     if (lines.isEmpty) {
       return Center(
@@ -146,7 +148,7 @@ class _LyricsViewState extends State<LyricsView> {
                   wordSynced: lyrics.wordSynced,
                   showTranslation: showTranslation,
                   showRomaji: showRomaji,
-                  fade: depth ? _fadeFor((i - active).abs()) : 1,
+                  fade: depth ? _fadeFor((i - focus).abs()) : 1,
                   onTap: widget.interactive
                       ? () {
                           player.seek(
@@ -183,14 +185,23 @@ class _LyricsViewState extends State<LyricsView> {
     );
   }
 
-  /// 重叠演唱：下一行已经开始，但这一行（或它的背景人声）还没唱完时，继续当作当前行显示。
-  /// 只看逐字歌词，逐行歌词的结束时间多半是推算的。最多往前看 3 行。
-  static bool _stillSinging(Lyrics lyrics, int i, int active, Duration position) =>
-      lyrics.wordSynced && i < active && i >= active - 3 && position < lyrics.lines[i].end;
-
   /// 和当前行相距 [d] 行时的不透明度：越远越淡，营造景深感。
   /// 不用实时模糊：每行一个 saveLayer + 高斯模糊在滚动时每帧都要重算，中端机会掉帧。
   static double _fadeFor(int d) => d == 0 ? 1 : math.max(0.35, 1 - d * 0.14);
+}
+
+/// 重叠演唱：下一行已经开始，但这一行（或它的背景人声）还没唱完时，继续当作当前行显示。
+/// 只看逐字歌词，逐行歌词的结束时间多半是推算的。最多往前看 3 行。
+bool _stillSinging(Lyrics lyrics, int i, int active, Duration position) =>
+    lyrics.wordSynced && i < active && i >= active - 3 && position < lyrics.lines[i].end;
+
+/// 滚动和景深对准的行：还在唱的最早一行（见 [_stillSinging]），没有时就是 [active]。
+@visibleForTesting
+int lyricFocusIndex(Lyrics lyrics, int active, Duration position) {
+  for (var i = math.max(0, active - 3); i < active; i++) {
+    if (_stillSinging(lyrics, i, active, position)) return i;
+  }
+  return active;
 }
 
 enum _LineState { past, active, future }
