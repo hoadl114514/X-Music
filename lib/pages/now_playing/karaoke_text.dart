@@ -159,6 +159,9 @@ class RenderKaraokeText extends RenderBox {
   final _painters = <Color, TextPainter>{};
   List<TextPainter?> _rubies = const [];
   List<List<Rect>> _wordBoxes = const [];
+
+  /// 和 [_wordBoxes] 一一对应，但高度是整行行高。填色只在这个范围里画，不会画到相邻的行。
+  List<List<Rect>> _wordRows = const [];
   double _layoutWidth = 0;
   String _text = '';
 
@@ -180,6 +183,7 @@ class RenderKaraokeText extends RenderBox {
     }
     _rubies = const [];
     _wordBoxes = const [];
+    _wordRows = const [];
   }
 
   @override
@@ -232,21 +236,26 @@ class RenderKaraokeText extends RenderBox {
     if (!fill) base.layout(minWidth: _layoutWidth, maxWidth: _layoutWidth);
     _painters[const Color(0xFFFFFFFF)] = base;
     _wordBoxes = [];
+    _wordRows = [];
     var at = 0;
     for (final w in _words) {
       final end = at + w.text.length;
       // 只量去掉首尾空格的部分，填色和注音对准字形。
       final lead = w.text.length - w.text.trimLeft().length;
       final trail = w.text.length - w.text.trimRight().length;
-      final boxes = end - trail > at + lead
-          ? base
-                .getBoxesForSelection(
-                  TextSelection(baseOffset: at + lead, extentOffset: end - trail),
-                )
-                .map((b) => b.toRect())
-                .toList()
-          : const <Rect>[];
-      _wordBoxes.add(boxes);
+      final sel = TextSelection(baseOffset: at + lead, extentOffset: end - trail);
+      final has = end - trail > at + lead;
+      _wordBoxes.add(
+        has ? base.getBoxesForSelection(sel).map((b) => b.toRect()).toList() : const <Rect>[],
+      );
+      _wordRows.add(
+        has
+            ? base
+                  .getBoxesForSelection(sel, boxHeightStyle: ui.BoxHeightStyle.max)
+                  .map((b) => b.toRect())
+                  .toList()
+            : const <Rect>[],
+      );
       at = end;
     }
     if (_hasRuby) {
@@ -268,6 +277,10 @@ class RenderKaraokeText extends RenderBox {
   /// 每个字在排版里占的矩形（跨行时多个），测试用。
   @visibleForTesting
   List<List<Rect>> get wordBoxes => _wordBoxes;
+
+  /// 每个字的填色裁剪范围（整行行高），测试用。
+  @visibleForTesting
+  List<List<Rect>> get wordRows => _wordRows;
 
   @override
   void performLayout() {
@@ -322,14 +335,25 @@ class RenderKaraokeText extends RenderBox {
       for (var i = 0; i < _words.length; i++)
         if (_progress(_words[i]) > 0 && _wordBoxes[i].isNotEmpty) i,
     ];
+    // 填色、上浮的裁剪范围用整行行高，不越过相邻的行；首行往上、末行往下多留一点给字形和上浮。
     final pad = _fontSize * 0.4;
-    Rect grow(Rect r) => Rect.fromLTRB(r.left, r.top - pad, r.right, r.bottom + pad);
+    Rect area(int i, int j) {
+      final rows = _wordRows[i];
+      final r = j < rows.length ? rows[j] : _wordBoxes[i][j];
+      return Rect.fromLTRB(
+        r.left,
+        r.top <= 0.5 ? r.top - pad : r.top,
+        r.right,
+        r.bottom >= size.height - 0.5 ? r.bottom + pad : r.bottom,
+      );
+    }
+
     canvas.save();
     if (moving.isNotEmpty) {
       final hole = Path();
       for (final i in moving) {
-        for (final b in _wordBoxes[i]) {
-          hole.addRect(grow(b.shift(offset)));
+        for (var j = 0; j < _wordBoxes[i].length; j++) {
+          hole.addRect(area(i, j).shift(offset));
         }
       }
       canvas.clipPath(
@@ -348,8 +372,8 @@ class RenderKaraokeText extends RenderBox {
       final glow = math.sin(math.pi * p.clamp(0.0, 1.0)) * 0.55;
       if (glow > 0.01 && boxes.length == 1) _paintGlow(canvas, offset, i, boxes.single, lift, glow);
       var before = 0.0;
-      for (final b in boxes) {
-        final r = grow(b.shift(offset));
+      for (final (j, b) in boxes.indexed) {
+        final r = area(i, j).shift(offset);
         canvas.save();
         canvas.translate(0, lift);
         canvas.clipRect(r);

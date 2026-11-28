@@ -67,6 +67,15 @@ void main() {
     expect(boxes.last.single.top, greaterThan(boxes.first.single.top));
   });
 
+  testWidgets('填色范围不越过相邻的行（hand 顶部被点亮的问题）', (tester) async {
+    final r = await _pump(tester, english, karaoke: true);
+    final first = r.wordRows.first.single;
+    final last = r.wordRows.last.single;
+    expect(last.top, greaterThan(first.top));
+    // 不同行的填色范围不重叠。
+    expect(first.bottom, lessThanOrEqualTo(last.top));
+  });
+
   testWidgets('当前行逐字填色和普通状态排版一致', (tester) async {
     final idle = await _pump(tester, english);
     final idleSize = idle.size;
